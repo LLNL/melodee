@@ -89,6 +89,7 @@ precedence = (
     ("nonassoc", "<", ">", "BOOLEQ", "LEQ", "GEQ"),
     ('left', '+', '-'),
     ('left', '*', '/'),
+    ('right', 'NOT', 'UMINUS'),
     ('left', '^'),
 )
 
@@ -333,7 +334,7 @@ def p_realExpr_numberLiteral(t):
     '''
     pass
 def p_realExpr_unaryMinus(t):
-    '''realExpr : '-' realExpr'''
+    '''realExpr : '-' realExpr %prec UMINUS'''
     pass
 def p_realExpr_binaryOp(t):
     '''realExpr : realExpr '+' realExpr
