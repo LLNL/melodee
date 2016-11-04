@@ -45,10 +45,11 @@ tokens = (
     "DIVIDEEQ",
     "EXPONEQ",
     "NUMBER",
-    "NAME"
+    "NAME",
+    "ONE",
 ) + tuple(reserved.values())
 
-literals = "(){}<>!;:+-/*^=."
+literals = "(){}<>!;+-/*^=."
 
 def t_AND(t):
     r'(?:and)|(?:&&)'
@@ -65,7 +66,11 @@ def t_NAME(t):
     t.type = reserved.get(t.value,"NAME")
     return t
 
-
+def t_NUMBER(t):
+    r'(?:(?:[0-9]+(?:\.[0-9]*)?)|(?:\.[0-9]+))(?:[eE][-\+]?[0-9]+)?'
+    if t.value == "1":
+        t.type = "ONE"
+    return t
 
 t_LEQ = r'<='
 t_GEQ = r'>='
@@ -76,8 +81,6 @@ t_MINUSEQ = r'-='
 t_TIMESEQ = r'\*='
 t_DIVIDEEQ = r'/='
 t_EXPONEQ = r'^='
-
-t_NUMBER = r'(?:(?:[0-9]+(?:\.[0-9]*)?)|(?:\.[0-9]+))(?:[eE][-\+]?[0-9]+)?'
 
 t_ignore_CPP_COMMENT = r'//.*?\n'
 t_ignore_C_COMMENT = r'/\*.*?\*/'
@@ -126,7 +129,7 @@ def p_flagDeclBool(t):
     '''flagDeclBool : FLAG var'''
     pass
 def p_flagDeclEnum(t):
-    '''flagDeclEnum : FLAG var ':' '{' nameList '}' '''
+    '''flagDeclEnum : FLAG var '{' nameList '}' '''
     pass
 
 def p_nameList_term(t):
@@ -215,7 +218,7 @@ def p_varDef_modAssign(t):
     pass
 
 def p_assignDef(t):
-    '''assignDef : var '=' realExpr ';' '''
+    '''assignDef : varMaybeUnit '=' realExpr ';' '''
     pass
 
 def p_accumDef(t):
@@ -299,7 +302,9 @@ def p_boolCompare(t):
 def p_unitExpr_literal(t):
     '''unitExpr : NAME'''
     pass
-
+def p_unitExpr_1(t):
+    '''unitExpr : ONE'''
+    pass
 def p_unitExpr_paren(t):
     '''unitExpr : '(' unitExpr ')' '''
     pass
@@ -311,7 +316,7 @@ def p_unitExpr_op(t):
     pass
 
 def p_unitExpr_expon(t):
-    '''unitExpr : unitExpr '^' NUMBER'''
+    '''unitExpr : unitExpr '^' numberLiteral'''
     pass
 
 def p_var(t):
@@ -325,14 +330,19 @@ def p_varMaybeUnit_withUnit(t):
     '''varMaybeUnit : varWithUnit'''
     pass
 def p_varWithUnit(t):
-    '''varWithUnit : var ':' '(' unitExpr ')' '''
+    '''varWithUnit : var '{' unitExpr '}' '''
     pass
 def p_realExpr_literal(t):
-    '''realExpr : numberLiteral'''
+    '''realExpr : numberLiteralPlusOpt'''
+    pass
+def p_realExpr_numberLiteralPlusOpt(t):
+    '''numberLiteralPlusOpt : numberLiteral
+                            | '+' numberLiteral
+    '''
     pass
 def p_realExpr_numberLiteral(t):
     '''numberLiteral : NUMBER
-                     | '+' NUMBER
+                     | ONE
     '''
     pass
 def p_realExpr_unit(t):
