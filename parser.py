@@ -85,7 +85,8 @@ t_ignore_PYTHON_COMMENT = r'\#.*?\n'
 t_ignore_MATLAB_COMMENT = r'%.*?\n'
 
 precedence = (
-    ("nonassoc", "AND", "OR"),
+    ("left", "OR"),
+    ("left", "AND"),
     ("nonassoc", "<", ">", "BOOLEQ", "LEQ", "GEQ"),
     ('left', '+', '-'),
     ('left', '*', '/'),
@@ -271,18 +272,18 @@ def p_boolLiteral(t):
 def p_boolExpr_literal(t):
     '''boolExpr : boolLiteral'''
     pass
-def p_boolExpr_varLiteral(t):
-    '''boolExpr : var'''
+def p_boolExpr_real(t):
+    '''boolExpr : realExpr'''
     pass
-def p_boolExpr_neg(t):
-    '''boolExpr : NOT boolExpr '''
+def p_realExpr_neg(t):
+    '''realExpr : NOT realExpr '''
     pass
-def p_boolExpr_compare(t):
-    '''boolExpr : boolComparison'''
+def p_realExpr_compare(t):
+    '''realExpr : boolComparison'''
     pass
-def p_boolExpr_binary(t):
-    '''boolExpr : boolExpr AND boolExpr
-                | boolExpr OR boolExpr
+def p_realExpr_binary(t):
+    '''realExpr : realExpr AND realExpr
+                | realExpr OR realExpr
     '''
     pass
 def p_boolCompare(t):
@@ -292,9 +293,6 @@ def p_boolCompare(t):
                       | realExpr '<' realExpr
                       | realExpr '>' realExpr
     '''
-    pass
-def p_boolExpr_paren(t):
-    '''boolExpr : '(' boolExpr ')' '''
     pass
 
 def p_unitExpr_literal(t):
@@ -326,7 +324,7 @@ def p_varMaybeUnit_withUnit(t):
     '''varMaybeUnit : varWithUnit'''
     pass
 def p_varWithUnit(t):
-    '''varWithUnit : var ':' unitExpr'''
+    '''varWithUnit : var ':' '(' unitExpr ')' '''
     pass
 def p_realExpr_literal(t):
     '''realExpr : numberLiteral'''
@@ -352,6 +350,9 @@ def p_realExpr_paren(t):
     pass
 def p_realExpr_func(t):
     '''realExpr : NAME '(' funcArgListOpt ')' '''
+    pass
+def p_realExpr_var(t):
+    '''realExpr : varMaybeUnit'''
     pass
 def p_funcArgListOpt_zero(t):
     '''funcArgListOpt : empty'''
