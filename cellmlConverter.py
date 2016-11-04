@@ -409,7 +409,66 @@ if __name__=="__main__":
     import os;
     cellmlFilename = sys.argv[1];
     root = stripNamespaces(ET.parse(cellmlFilename))
-    
+
+    cellmlBaseUnits = {
+        "ampere" : {"A", 1},
+        "farad" : {"F", 1},
+        "katal" : {"katal", 1},
+        "lux" : {"lux", 1},
+        "pascal" : {"Pa", 1},
+        "tesla" : {"tesla", 1},
+        "becquerel" : {"becquerel", 1},
+        "gram" : {"g", 1},
+        "kelvin" : {"kelvin", 1},
+        "meter" : {"m", 1},
+        "radian" : {"radian", 1},
+        "volt" : {"V", 1},
+        "candela" : {"candela", 1},
+        "gray" : {"gray", 1},
+        "kilogram" : {"kilogram", 1},
+        "metre" : {"m", 1},
+        "second" : {"s", 1},
+        "watt" : {"watt", 1},
+        "celsius" : {"celsius", 1},
+        "henry" : {"henry", 1},
+        "liter" : {"L", 1},
+        "mole" : {"mol", 1},
+        "siemens" : {"S", 1},
+        "weber" : {"weber", 1},
+        "coulomb" : {"C", 1},
+        "hertz" : {"Hz", 1},
+        "litre" : {"L", 1},
+        "newton" : {"N", 1},
+        "sievert" : {"sievert", 1},
+        "dimensionless" : {"1", 1},
+        "joule" : {"J", 1},
+        "lumen" : {"lumen", 1},
+        "ohm" : {"ohm", 1},
+        "steradian" : {"steradian", 1}
+        }
+
+    cellmlPrefixes = {
+        "yotta" : "yotta",
+        "zetta" : "zeta",
+        "exa" : 'E',
+        "peta" : 'P',
+        "tera" : 'T',
+        "giga" : 'G',
+        "mega" : 'M',
+        "kilo" : 'k',
+        "hecto" : 'h',
+        "deka" : 'da',
+        "deci" : 'd',
+        "centi" : 'c',
+        "milli" : 'm',
+        "micro" : 'u',
+        "nano" : 'n',
+        "pico" : 'p',
+        "femto" : 'f',
+        "atto" : 'a',
+        "zepto" : 'zepto',
+        "yocto" : 'yocto',
+        }
     #get all the components from memory
     components = {}
     for element in root.findall("component"):
