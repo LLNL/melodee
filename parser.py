@@ -90,6 +90,7 @@ precedence = (
     ("nonassoc", "<", ">", "BOOLEQ", "LEQ", "GEQ"),
     ('left', '+', '-'),
     ('left', '*', '/'),
+    ('nonassoc', 'ANNOTATE_UNIT'),
     ('right', 'NOT', 'UMINUS'),
     ('left', '^'),
 )
@@ -207,19 +208,19 @@ def p_varDef_accum(t):
     pass
 
 def p_varDef_modAssign(t):
-    '''varDef : varMaybeUnit TIMESEQ realExpr ';'
-              | varMaybeUnit DIVIDEEQ realExpr ';'
-              | varMaybeUnit EXPONEQ realExpr ';'
+    '''varDef : var TIMESEQ realExpr ';'
+              | var DIVIDEEQ realExpr ';'
+              | var EXPONEQ realExpr ';'
     '''
     pass
 
 def p_assignDef(t):
-    '''assignDef : varMaybeUnit '=' realExpr ';' '''
+    '''assignDef : var '=' realExpr ';' '''
     pass
 
 def p_accumDef(t):
-    '''accumDef : varMaybeUnit PLUSEQ realExpr ';'
-                | varMaybeUnit MINUSEQ realExpr ';'
+    '''accumDef : var PLUSEQ realExpr ';'
+                | var MINUSEQ realExpr ';'
     '''
     pass
 
@@ -254,10 +255,10 @@ def p_elseIfClausesOpt_term(t):
     pass
 
 def p_ifClause(t):
-    '''ifClause : IF boolExpr '{' subSystemStatementsOpt '}' '''
+    '''ifClause : IF '(' boolExpr ')' '{' subSystemStatementsOpt '}' '''
     pass
 def p_elseifClause(t):
-    '''elseifClause : ELSEIF boolExpr '{' subSystemStatementsOpt '}' '''
+    '''elseifClause : ELSEIF '(' boolExpr ')' '{' subSystemStatementsOpt '}' '''
     pass
 def p_elseClause(t):
     '''elseClause : ELSE '{' subSystemStatementsOpt '}' '''
@@ -334,6 +335,9 @@ def p_realExpr_numberLiteral(t):
                      | '+' NUMBER
     '''
     pass
+def p_realExpr_unit(t):
+    '''realExpr : realExpr '{' unitExpr '}' %prec ANNOTATE_UNIT'''
+    pass
 def p_realExpr_unaryMinus(t):
     '''realExpr : '-' realExpr %prec UMINUS'''
     pass
@@ -352,7 +356,7 @@ def p_realExpr_func(t):
     '''realExpr : NAME '(' funcArgListOpt ')' '''
     pass
 def p_realExpr_var(t):
-    '''realExpr : varMaybeUnit'''
+    '''realExpr : var'''
     pass
 def p_funcArgListOpt_zero(t):
     '''funcArgListOpt : empty'''
