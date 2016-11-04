@@ -24,7 +24,7 @@ reserved = {
     "diffvar" : "DIFFVAR",
     "diff" : "DIFF",
     "init" : "INIT",
-    "avail" : "AVAIL",
+    "shared" : "SHARED",
     "provides" : "PROVIDES",
     "subsystem" : "SUBSYSTEM",
     #"rename" : "RENAME",
@@ -106,19 +106,19 @@ def p_topLevelStatementOpt_scope(t):
     pass
 
 def p_topLevelStatement(t):
-    '''topLevelStatement : availabilityStatement
+    '''topLevelStatement : sharedStatement
                          | subSystemDefinition
     '''
     pass
 
-def p_availabilityStatement_unit(t):
-    '''availabilityStatement : AVAIL STABLE varWithUnit ';'
-                             | AVAIL EPHEMERAL varWithUnit ';'
+def p_sharedStatement_unit(t):
+    '''sharedStatement : SHARED STABLE varWithUnit ';'
+                             | SHARED EPHEMERAL varWithUnit ';'
     '''
     pass
-def p_availabilityStatement_flag(t):
-    '''availabilityStatement : AVAIL flagDeclBool ';'
-                             | AVAIL flagDeclEnum ';'
+def p_sharedStatement_flag(t):
+    '''sharedStatement : SHARED flagDeclBool ';'
+                             | SHARED flagDeclEnum ';'
     '''
     pass
 def p_flagDeclBool(t):
@@ -153,8 +153,8 @@ def p_scopeDefinition_scope(t):
     '''scopeDefinition : '{' subSystemStatementsOpt '}' '''
     pass
 
-def p_subSystemStatement_avail(t):
-    '''subSystemStatement : availabilityStatement'''
+def p_subSystemStatement_shared(t):
+    '''subSystemStatement : sharedStatement'''
     pass
 
 def p_subSystemStatement_subSystem(t):
