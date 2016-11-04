@@ -20,7 +20,12 @@ reserved = {
     "ephemeral" : "EPHEMERAL",
     "flag" : "FLAG",
     "param" : "PARAM",
+    "accum" : "ACCUM",
+    "diffvar" : "DIFFVAR",
+    "diff" : "DIFF",
+    "init" : "INIT",
     "avail" : "AVAIL",
+    "provides" : "PROVIDES",
     "subsystem" : "SUBSYSTEM",
     #"rename" : "RENAME",
     #"to" : "TO",
@@ -79,9 +84,13 @@ t_ignore_C_COMMENT = r'/\*.*?\*/'
 t_ignore_PYTHON_COMMENT = r'\#.*?\n'
 t_ignore_MATLAB_COMMENT = r'%.*?\n'
 
-def p_empty(t):
-    '''empty :'''
-    pass
+precedence = (
+    ("nonassoc", "AND", "OR"),
+    ("nonassoc", "<", ">", "BOOLEQ", "LEQ", "GEQ"),
+    ('left', '+', '-'),
+    ('left', '*', '/'),
+    ('left', '^'),
+)
 
 def p_topLevelStatementsOpt(t):
     '''topLevelStatementsOpt : topLevelStatement topLevelStatementsOpt'''
@@ -91,7 +100,7 @@ def p_topLevelStatementsOpt_term(t):
     '''topLevelStatementsOpt : empty'''
     pass
 def p_topLevelStatementOpt_scope(t):
-    '''topLevelStatementOpt : '{' topLevelStatementsOpt '}' '''
+    '''topLevelStatementsOpt : '{' topLevelStatementsOpt '}' '''
     pass
 
 def p_topLevelStatement(t):
@@ -114,7 +123,7 @@ def p_flagDeclBool(t):
     '''flagDeclBool : FLAG var'''
     pass
 def p_flagDeclEnum(t):
-    '''flagDeclEnum : FLAG var : '{' nameList '}' '''
+    '''flagDeclEnum : FLAG var ':' '{' nameList '}' '''
     pass
 
 def p_nameList_term(t):
@@ -160,17 +169,19 @@ def p_providesStatement_flagDecl(t):
     '''
     pass
 def p_provdesStatement_flagBoolDefn(t):
-    '''providesStatement : PROVIDES flagDeclBool '=' boolLiteral '''
+    '''providesStatement : PROVIDES flagDeclBool '=' boolLiteral ';' '''
     
 def p_providesStatement_flagEnumDefn(t):
-    '''providesStatement : PROVIDES flagDeclEnum = NAME ';' '''
+    '''providesStatement : PROVIDES flagDeclEnum '=' NAME ';' '''
     pass
 
 def p_providesStatement_DeclSubNoUnit(t):
     '''providesStatement : PROVIDES ACCUM varMaybeUnit ';'
                          | PROVIDES DIFFVAR varMaybeUnit ';'
                          | PROVIDES PARAM varMaybeUnit ';'
-                         : PROVIDES varMaybeUnit ';'
+                         | PROVIDES STABLE varMaybeUnit ';'
+                         | PROVIDES EPHEMERAL varMaybeUnit ';'
+                         | PROVIDES varMaybeUnit ';'
     '''
     pass
 
@@ -182,7 +193,7 @@ def p_providesStatement_Defn(t):
     pass
 
 def p_subSystemStatement_definition(t):
-    '''subSystemStatement : varDef'''
+    '''subSystemStatement : varDef ';' '''
     pass
 
 def p_varDef_assign(t):
@@ -215,8 +226,8 @@ def p_subSystemStatement_diffDef(t):
     pass
 
 def p_diffDef(t):
-    '''diffDef : VAR '.' INIT '=' realExpr ';'
-               | VAR '.' DIFF '=' realExpr ';'
+    '''diffDef : var '.' INIT '=' realExpr ';'
+               | var '.' DIFF '=' realExpr ';'
     '''
     pass
 
@@ -241,13 +252,13 @@ def p_elseIfClausesOpt_term(t):
     pass
 
 def p_ifClause(t):
-    '''ifClause : IF boolExpr '{' subSystemStatementOpt '}' '''
+    '''ifClause : IF boolExpr '{' subSystemStatementsOpt '}' '''
     pass
 def p_elseifClause(t):
-    '''elseifClause : ELSEIF boolExpr '{' subSystemStatementOpt '}' '''
+    '''elseifClause : ELSEIF boolExpr '{' subSystemStatementsOpt '}' '''
     pass
 def p_elseClause(t):
-    '''elseClause : ELSE '{ subSystemStatementOpt '}' '''
+    '''elseClause : ELSE '{' subSystemStatementsOpt '}' '''
     pass
 
 def p_boolLiteral(t):
@@ -257,11 +268,6 @@ def p_boolLiteral(t):
     '''
     pass
 
-def p_notLiteral(t):
-    '''notLiteral : '!'
-                  | NOT
-    '''
-    pass
 def p_boolExpr_literal(t):
     '''boolExpr : boolLiteral'''
     pass
@@ -350,10 +356,14 @@ def p_funcArgListOpt_nonzero(t):
     '''funcArgListOpt : funcArgList'''
     pass
 def p_funcArgList_term(t):
-    '''funcArgList: realExpr'''
+    '''funcArgList : realExpr'''
     pass
 def p_funcArgList_shift(t):
-    '''funcArgList: realExpr ',' funcArgList'''
+    '''funcArgList : realExpr ',' funcArgList'''
+    pass
+
+def p_empty(t):
+    '''empty :'''
     pass
 
 
@@ -377,3 +387,6 @@ and && or || not ! 0 2.0 .3 40. 5e+6 if myID */* bljsadfj */ */
             break
         print tok
 
+    import ply.yacc as yacc
+    parser = yacc.yacc()
+    
