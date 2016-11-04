@@ -265,7 +265,6 @@ def p_elseClause(t):
 def p_boolLiteral(t):
     '''boolLiteral : TRUE
                    | FALSE
-                   | NUMBER
     '''
     pass
 
