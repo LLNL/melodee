@@ -311,6 +311,10 @@ def p_unitExpr_op(t):
     '''
     pass
 
+def p_unitExpr_expon(t):
+    '''unitExpr : unitExpr '^' NUMBER'''
+    pass
+
 def p_var(t):
     '''var : NAME'''
     pass
