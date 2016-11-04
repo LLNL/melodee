@@ -240,7 +240,6 @@ class Component:
         self.variables = set()
         self.inputs = set()
         self.outputs = set()
-        self.isRoot = False
         
         self.eqns = {}
         diffeqns = {}
@@ -278,9 +277,8 @@ class Component:
     def toCode(self, out, declared=set()):
         declared = declared.copy()
 
-        if not self.isRoot:
-            out("component %s {", self.name)
-            out.inc()
+        out("subsystem %s {", self.name)
+        out.inc()
 
         #find all the variables I need to specify for me.
         allDecl = set()
@@ -306,30 +304,22 @@ class Component:
         #separate those declared variables into computed and state
         if True:
             allDecl -= declared
-        for var in order((allDecl & allDiffvars) & self.inputs):
-            out("input state %s;" , var)
-        for var in order((allDecl & allConstants) & self.inputs):
-            out("import const %s;", var)
-        for var in order((allDecl - allDiffvars - allConstants) & self.inputs):
-            out("import volatile %s;", var)
-        for var in order((allDecl & allDiffvars) & self.outputs):
-            out("define state %s;" , var)
-        for var in order((allDecl & allConstants) & self.outputs):
-            out("define const %s;", var)
-        for var in order((allDecl - allDiffvars - allConstants) & self.outputs):
-            out("define volatile %s;", var)
-        for var in order((allDecl & allDiffvars) - self.outputs - self.inputs):
-            out("state %s;", var)
+        for var in order(self.outputs & allDiffvars):
+            out("provides diffvar %s;" , var)
+        for var in order(self.outputs & allConstants):
+            out("provides stable %s;", var)
+        for var in order(self.outputs - allDiffvars - allConstants):
+            out("provides ephemeral %s;", var)
+        for var in order((allDecl - allConstants) - self.outputs - self.inputs):
+            out("shared ephemeral %s;", var)
         for var in order((allDecl & allConstants) - self.outputs - self.inputs):
-            out("const %s;", var)
-        for var in order((allDecl - allDiffvars - allConstants) - self.outputs - self.inputs):
-            out("volatile %s;", var)
+            out("shared stable %s;", var)
 
         declared |= allDecl
 
         #find all the differential variables
         invoked = set()
-        good = self.inputs.copy() | allDiffvars | allConstants
+        good = self.inputs.copy() | allDiffvars | (allConstants-self.localConstants())
         defined = set()
         while True:
             newFront = set()
@@ -380,9 +370,8 @@ class Component:
                     print component.outputs - good
                 assert(False)
 
-        if not self.isRoot:
-            out.dec()
-            out("}")
+        out.dec()
+        out("}")
 
     def outputDiffvars(self):
         myvars = set()
@@ -408,15 +397,16 @@ class Component:
 
 
 class RootComponent(Component):
-    def __init__(self, inputs, outputs):
+    def __init__(self, name, inputs, outputs):
         self.inputs = inputs;
         self.outputs = outputs;
         self.eqns = {}
         self.subComponents = {}
-        self.isRoot = True
+        self.name = name
         
 if __name__=="__main__":
     import sys;
+    import os;
     cellmlFilename = sys.argv[1];
     root = stripNamespaces(ET.parse(cellmlFilename))
     
@@ -452,11 +442,14 @@ if __name__=="__main__":
                 rootInputConstants[var] = components[environmentName].eqns[var]
             rootInputs |= components[environmentName].outputs-set(rootInputConstants.keys())
             rootOutputs |= components[environmentName].inputs
-    root = RootComponent(rootInputs, rootOutputs)
+    (rootName, rootExt) = os.path.splitext(os.path.basename(sys.argv[1]))
+    root = RootComponent(rootName, rootInputs, rootOutputs)
     root.eqns = rootInputConstants
     for component in components.values():
         if component.name not in environmentNames and component not in allChildren:
             root.addSubComponent(component)
     
     out = Indenter(sys.stdout)
+    for var in root.inputs:
+        out("shared ephemeral %s;" % var)
     root.toCode(out)
