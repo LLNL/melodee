@@ -27,6 +27,7 @@ reserved = {
     "shared" : "SHARED",
     "provides" : "PROVIDES",
     "subsystem" : "SUBSYSTEM",
+    "pow" : "POW",
     #"rename" : "RENAME",
     #"to" : "TO",
     #"from" : "FROM",
@@ -88,9 +89,10 @@ t_ignore_PYTHON_COMMENT = r'\#.*?\n'
 t_ignore_MATLAB_COMMENT = r'%.*?\n'
 
 precedence = (
+    ("nonassoc", "RESOLVE"),
     ("left", "OR"),
     ("left", "AND"),
-    ("nonassoc", "<", ">", "BOOLEQ", "LEQ", "GEQ"),
+    #("nonassoc", "<", ">", "BOOLEQ", "LEQ", "GEQ"),
     ('left', '+', '-'),
     ('left', '*', '/'),
     ('nonassoc', 'ANNOTATE_UNIT'),
@@ -211,19 +213,19 @@ def p_varDef_accum(t):
     pass
 
 def p_varDef_modAssign(t):
-    '''varDef : var TIMESEQ realExpr ';'
-              | var DIVIDEEQ realExpr ';'
-              | var EXPONEQ realExpr ';'
+    '''varDef : var TIMESEQ realExprMaybeUnit ';'
+              | var DIVIDEEQ realExprMaybeUnit ';'
+              | var EXPONEQ realExprMaybeUnit ';'
     '''
     pass
 
 def p_assignDef(t):
-    '''assignDef : varMaybeUnit '=' realExpr ';' '''
+    '''assignDef : varMaybeUnit '=' realExprMaybeUnit ';' '''
     pass
 
 def p_accumDef(t):
-    '''accumDef : var PLUSEQ realExpr ';'
-                | var MINUSEQ realExpr ';'
+    '''accumDef : var PLUSEQ realExprMaybeUnit ';'
+                | var MINUSEQ realExprMaybeUnit ';'
     '''
     pass
 
@@ -232,8 +234,8 @@ def p_subSystemStatement_diffDef(t):
     pass
 
 def p_diffDef(t):
-    '''diffDef : var '.' INIT '=' realExpr ';'
-               | var '.' DIFF '=' realExpr ';'
+    '''diffDef : var '.' INIT '=' realExprMaybeUnit ';'
+               | var '.' DIFF '=' realExprMaybeUnit ';'
     '''
     pass
 
@@ -276,28 +278,28 @@ def p_boolLiteral(t):
 def p_boolExpr_literal(t):
     '''boolExpr : boolLiteral'''
     pass
-def p_boolExpr_real(t):
-    '''boolExpr : realExpr'''
-    pass
-def p_realExpr_neg(t):
-    '''realExpr : NOT realExpr '''
-    pass
-def p_realExpr_compare(t):
-    '''realExpr : boolComparison'''
-    pass
-def p_realExpr_binary(t):
-    '''realExpr : realExpr AND realExpr
-                | realExpr OR realExpr
-    '''
-    pass
-def p_boolCompare(t):
-    '''boolComparison : realExpr BOOLEQ realExpr
-                      | realExpr LEQ realExpr
-                      | realExpr GEQ realExpr
-                      | realExpr '<' realExpr
-                      | realExpr '>' realExpr
-    '''
-    pass
+#def p_boolExpr_real(t):
+#    '''boolExpr : realExpr'''
+#    pass
+#def p_realExpr_neg(t):
+#    '''realExpr : NOT realExpr '''
+#    pass
+#def p_realExpr_compare(t):
+#    '''realExpr : boolComparison'''
+#    pass
+#def p_realExpr_binary(t):
+#    '''realExpr : realExpr AND realExpr
+#                | realExpr OR realExpr
+#    '''
+#    pass
+#def p_boolCompare(t):
+#    '''boolComparison : realExpr BOOLEQ realExpr
+#                      | realExpr LEQ realExpr
+#                      | realExpr GEQ realExpr
+#                      | realExpr '<' realExpr
+#                      | realExpr '>' realExpr
+#    '''
+#    pass
 
 def p_unitExpr_literal(t):
     '''unitExpr : NAME'''
@@ -332,41 +334,31 @@ def p_varMaybeUnit_withUnit(t):
 def p_varWithUnit(t):
     '''varWithUnit : var '{' unitExpr '}' '''
     pass
-def p_realExpr_literal(t):
-    '''realExpr : numberLiteralPlusOpt'''
+
+############################################
+def p_realExprUnclearUnit_base(t):
+    '''realExprUnclearUnit : var'''
     pass
-def p_realExpr_numberLiteralPlusOpt(t):
-    '''numberLiteralPlusOpt : numberLiteral
-                            | '+' numberLiteral
+def p_realExprUnclearUnit_binop(t):
+    '''realExprUnclearUnit : realExprUnclearUnit '+' realExprUnclearUnit
+                           | realExprUnclearUnit '-' realExprUnclearUnit
+                           | realExprUnclearUnit '*' realExprUnclearUnit
+                           | realExprUnclearUnit '/' realExprUnclearUnit
     '''
     pass
-def p_realExpr_numberLiteral(t):
-    '''numberLiteral : NUMBER
-                     | ONE
-    '''
-    pass
-def p_realExpr_unit(t):
-    '''realExpr : realExpr '{' unitExpr '}' %prec ANNOTATE_UNIT'''
-    pass
-def p_realExpr_unaryMinus(t):
-    '''realExpr : '-' realExpr %prec UMINUS'''
-    pass
-def p_realExpr_binaryOp(t):
-    '''realExpr : realExpr '+' realExpr
-                | realExpr '-' realExpr
-                | realExpr '*' realExpr
-                | realExpr '/' realExpr
-                | realExpr '^' realExpr
+def p_realExprUnclearUnit_pow(t):
+    '''realExprUnclearUnit : POW '(' realExprUnclearUnit ',' realExprMaybeUnit ')'
+                           | realExprUnclearUnit '^' realExprMaybeUnit
     '''
     pass
 def p_realExpr_paren(t):
-    '''realExpr : '(' realExpr ')' '''
+    '''realExprUnclearUnit : '(' realExprUnclearUnit ')' '''
     pass
-def p_realExpr_func(t):
-    '''realExpr : NAME '(' funcArgListOpt ')' '''
+def p_realExprUnclearUnit_unaryMinus(t):
+    '''realExprUnclearUnit : '-' realExprUnclearUnit %prec UMINUS'''
     pass
-def p_realExpr_var(t):
-    '''realExpr : var'''
+def p_realExprUnclearUnit_func(t):
+    '''realExprUnclearUnit : NAME '(' funcArgListOpt ')' '''
     pass
 def p_funcArgListOpt_zero(t):
     '''funcArgListOpt : empty'''
@@ -375,10 +367,92 @@ def p_funcArgListOpt_nonzero(t):
     '''funcArgListOpt : funcArgList'''
     pass
 def p_funcArgList_term(t):
-    '''funcArgList : realExpr'''
+    '''funcArgList : realExprMaybeUnit'''
     pass
 def p_funcArgList_shift(t):
-    '''funcArgList : realExpr ',' funcArgList'''
+    '''funcArgList : realExprMaybeUnit ',' funcArgList'''
+    pass
+
+####################################
+def p_numberLiteralPlusOpt(t):
+    '''numberLiteralPlusOpt : numberLiteral
+                            | '+' numberLiteral
+    '''
+    pass
+def p_numberLiteral(t):
+    '''numberLiteral : NUMBER
+                     | ONE
+    '''
+    pass
+
+def p_realExprWithoutUnit_base(t):
+    '''realExprWithoutUnit : numberLiteralPlusOpt'''
+    pass
+def p_realExprWithoutUnit_binop(t):
+    '''realExprWithoutUnit : realExprUnclearUnit '+' realExprWithoutUnit
+                           | realExprUnclearUnit '-' realExprWithoutUnit
+                           | realExprUnclearUnit '*' realExprWithoutUnit
+                           | realExprUnclearUnit '/' realExprWithoutUnit
+                           | realExprWithoutUnit '+' realExprUnclearUnit
+                           | realExprWithoutUnit '-' realExprUnclearUnit
+                           | realExprWithoutUnit '*' realExprUnclearUnit
+                           | realExprWithoutUnit '/' realExprUnclearUnit
+    '''
+    pass
+def p_realExprWithoutUnit_pow(t):
+    '''realExprWithoutUnit : POW '(' realExprWithoutUnit ',' realExprMaybeUnit ')'
+                           | realExprWithoutUnit '^' realExprMaybeUnit
+    '''
+    pass
+def p_realExprWithout_paren(t):
+    '''realExprWithoutUnit : '(' realExprWithoutUnit ')' '''
+    pass
+def p_realExprWithoutUnit_unaryMinus(t):
+    '''realExprWithoutUnit : '-' realExprWithoutUnit %prec UMINUS'''
+    pass
+
+
+
+####################
+def p_realExprWithUnit_FromWithout(t):
+    '''realExprWithUnit : realExprWithoutUnit '{' unitExpr '}' %prec ANNOTATE_UNIT'''
+    pass
+def p_realExprWithUnit_FromUnclear(t):
+    '''realExprWithUnit : realExprUnclearUnit '{' unitExpr '}' %prec ANNOTATE_UNIT'''
+    pass
+def p_realExprWithUnit_binop(t):
+    '''realExprWithUnit : realExprUnclearUnit '+' realExprWithUnit
+                        | realExprUnclearUnit '-' realExprWithUnit
+                        | realExprUnclearUnit '*' realExprWithUnit
+                        | realExprUnclearUnit '/' realExprWithUnit
+                        | realExprWithUnit    '+' realExprUnclearUnit
+                        | realExprWithUnit    '-' realExprUnclearUnit
+                        | realExprWithUnit    '*' realExprUnclearUnit
+                        | realExprWithUnit    '/' realExprUnclearUnit
+    '''
+    pass
+def p_realExprWithUnit_pow(t):
+    '''realExprWithUnit : POW '(' realExprWithUnit ',' realExprMaybeUnit ')'
+                           | realExprWithUnit '^' realExprMaybeUnit
+    '''
+    pass
+def p_realExprWith_paren(t):
+    '''realExprWithUnit : '(' realExprWithUnit ')' '''
+    pass
+def p_realExprWithUnit_unaryMinus(t):
+    '''realExprWithUnit : '-' realExprWithUnit %prec UMINUS'''
+    pass
+
+######################
+
+def p_realExprMaybeUnit_Unclear(t):
+    '''realExprMaybeUnit : realExprUnclearUnit %prec RESOLVE'''
+    pass
+def p_realExprMaybeUnit_Without(t):
+    '''realExprMaybeUnit : realExprWithoutUnit %prec RESOLVE'''
+    pass
+def p_realExprMaybeUnit_With(t):
+    '''realExprMaybeUnit : realExprWithUnit %prec RESOLVE'''
     pass
 
 def p_empty(t):
