@@ -285,6 +285,9 @@ def p_boolExpr_binary(t):
 def p_boolExpr_net(t):
     '''boolExpr : NOT boolExpr'''
     pass
+def p_boolExpr_paren(t):
+    '''boolExpr : '(' boolExpr ')' '''
+    pass
 def p_boolExpr_boolCompare(t):
     '''boolExpr : boolCompare'''
     pass
