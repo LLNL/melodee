@@ -393,6 +393,9 @@ def p_realExpr_paren(t):
 def p_realExprUnclearUnit_unaryMinus(t):
     '''realExprUnclearUnit : '-' realExprUnclearUnit %prec UMINUS'''
     pass
+#def p_realExprUnclearUnit_ternary(t):
+#    '''realExprUnclearUnit : boolExpr '?' realExprUnclearUnit ':' realExprUnclearUnit '''
+#    pass
 def p_realExprUnclearUnit_func(t):
     '''realExprUnclearUnit : NAME '(' funcArgListOpt ')' '''
     pass
@@ -433,6 +436,10 @@ def p_realExprWithoutUnit_binop(t):
                            | realExprWithoutUnit '-' realExprUnclearUnit
                            | realExprWithoutUnit '*' realExprUnclearUnit
                            | realExprWithoutUnit '/' realExprUnclearUnit
+                           | realExprWithoutUnit '+' realExprWithoutUnit
+                           | realExprWithoutUnit '-' realExprWithoutUnit
+                           | realExprWithoutUnit '*' realExprWithoutUnit
+                           | realExprWithoutUnit '/' realExprWithoutUnit
     '''
     pass
 def p_realExprWithoutUnit_pow(t):
@@ -465,6 +472,10 @@ def p_realExprWithUnit_binop(t):
                         | realExprWithUnit    '-' realExprUnclearUnit
                         | realExprWithUnit    '*' realExprUnclearUnit
                         | realExprWithUnit    '/' realExprUnclearUnit
+                        | realExprWithUnit    '+' realExprWithUnit
+                        | realExprWithUnit    '-' realExprWithUnit
+                        | realExprWithUnit    '*' realExprWithUnit
+                        | realExprWithUnit    '/' realExprWithUnit
     '''
     pass
 def p_realExprWithUnit_pow(t):
