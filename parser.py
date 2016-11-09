@@ -92,7 +92,7 @@ precedence = (
     ("nonassoc", "RESOLVE"),
     ("left", "OR"),
     ("left", "AND"),
-    #("nonassoc", "<", ">", "BOOLEQ", "LEQ", "GEQ"),
+    ("nonassoc", "<", ">", "BOOLEQ", "LEQ", "GEQ"),
     ('left', '+', '-'),
     ('left', '*', '/'),
     ('nonassoc', 'ANNOTATE_UNIT'),
@@ -277,6 +277,39 @@ def p_boolLiteral(t):
 
 def p_boolExpr_literal(t):
     '''boolExpr : boolLiteral'''
+    pass
+def p_boolExpr_binary(t):
+    '''boolExpr : boolExpr AND boolExpr
+                | boolExpr OR boolExpr'''
+    pass
+def p_boolExpr_net(t):
+    '''boolExpr : NOT boolExpr'''
+    pass
+def p_boolExpr_boolCompare(t):
+    '''boolExpr : boolCompare'''
+    pass
+def p_boolCompare_UnclearUnit(t):
+    '''boolCompare : realExprUnclearUnit boolOp realExprUnclearUnit'''
+    pass
+def p_boolCompare_WithoutUnit(t):
+    '''boolCompare : realExprWithoutUnit boolOp realExprWithoutUnit
+                   | realExprWithoutUnit boolOp realExprUnclearUnit
+                   | realExprUnclearUnit boolOp realExprWithoutUnit
+    '''
+    pass
+def p_boolCompare_WithUnit(t):
+    '''boolCompare : realExprWithUnit boolOp realExprWithUnit
+                   | realExprWithUnit boolOp realExprUnclearUnit
+                   | realExprUnclearUnit boolOp realExprWithUnit
+    '''
+    pass
+def p_boolOp(t):
+    '''boolOp : BOOLEQ
+              | LEQ
+              | GEQ
+              | '<'
+              | '>'
+    '''
     pass
 #def p_boolExpr_real(t):
 #    '''boolExpr : realExpr'''
