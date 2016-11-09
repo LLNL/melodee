@@ -50,7 +50,7 @@ tokens = (
     "ONE",
 ) + tuple(reserved.values())
 
-literals = "(){}<>!;+-/*^=."
+literals = "(){}<>!;?:+-/*^=."
 
 def t_AND(t):
     r'(?:and)|(?:&&)'
@@ -63,7 +63,7 @@ def t_NOT(t):
     return t
 
 def t_NAME(t):
-    r'[_a-zA-Z][_a-zA-Z0-9]*'
+    r'[_a-zA-Z][_a-zA-Z0-9?]*'
     t.type = reserved.get(t.value,"NAME")
     return t
 
@@ -92,6 +92,7 @@ precedence = (
     ("nonassoc", "RESOLVE"),
     ("left", "OR"),
     ("left", "AND"),
+    ("nonassoc", 'TERNARY'),
     ("nonassoc", "<", ">", "BOOLEQ", "LEQ", "GEQ"),
     ('left', '+', '-'),
     ('left', '*', '/'),
@@ -393,9 +394,9 @@ def p_realExpr_paren(t):
 def p_realExprUnclearUnit_unaryMinus(t):
     '''realExprUnclearUnit : '-' realExprUnclearUnit %prec UMINUS'''
     pass
-#def p_realExprUnclearUnit_ternary(t):
-#    '''realExprUnclearUnit : boolExpr '?' realExprUnclearUnit ':' realExprUnclearUnit '''
-#    pass
+def p_realExprUnclearUnit_ternary(t):
+    '''realExprUnclearUnit : boolExpr '?' realExprUnclearUnit ':' realExprUnclearUnit %prec TERNARY'''
+    pass
 def p_realExprUnclearUnit_func(t):
     '''realExprUnclearUnit : NAME '(' funcArgListOpt ')' '''
     pass
@@ -442,6 +443,12 @@ def p_realExprWithoutUnit_binop(t):
                            | realExprWithoutUnit '/' realExprWithoutUnit
     '''
     pass
+def p_realExprWithoutUnit_ternary(t):
+    '''realExprWithoutUnit : boolExpr '?' realExprWithoutUnit ':' realExprWithoutUnit %prec TERNARY
+                           | boolExpr '?' realExprWithoutUnit ':' realExprUnclearUnit %prec TERNARY
+                           | boolExpr '?' realExprUnclearUnit ':' realExprWithoutUnit %prec TERNARY
+    '''
+    pass
 def p_realExprWithoutUnit_pow(t):
     '''realExprWithoutUnit : POW '(' realExprWithoutUnit ',' realExprMaybeUnit ')'
                            | realExprWithoutUnit '^' realExprMaybeUnit
@@ -476,6 +483,12 @@ def p_realExprWithUnit_binop(t):
                         | realExprWithUnit    '-' realExprWithUnit
                         | realExprWithUnit    '*' realExprWithUnit
                         | realExprWithUnit    '/' realExprWithUnit
+    '''
+    pass
+def p_realExprWithUnit_ternary(t):
+    '''realExprWithUnit : boolExpr '?' realExprWithUnit    ':' realExprWithUnit %prec TERNARY
+                        | boolExpr '?' realExprWithUnit    ':' realExprUnclearUnit %prec TERNARY
+                        | boolExpr '?' realExprUnclearUnit ':' realExprWithUnit %prec TERNARY
     '''
     pass
 def p_realExprWithUnit_pow(t):
