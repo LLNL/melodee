@@ -223,7 +223,9 @@ def p_varDef_modAssign(t):
 def p_assignDef(t):
     '''assignDef : varMaybeUnit '=' realExprMaybeUnit ';' '''
     pass
-
+def p_assignDef_bool(t):
+    '''assignDef : varMaybeUnit '=' boolExpr ';' '''
+    pass
 def p_accumDef(t):
     '''accumDef : var PLUSEQ realExprMaybeUnit ';'
                 | var MINUSEQ realExprMaybeUnit ';'
