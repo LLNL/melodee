@@ -261,10 +261,10 @@ def p_elseIfClausesOpt_term(t):
     pass
 
 def p_ifClause(t):
-    '''ifClause : IF '(' boolExpr ')' '{' subSystemStatementsOpt '}' '''
+    '''ifClause : IF boolExpr '{' subSystemStatementsOpt '}' '''
     pass
 def p_elseifClause(t):
-    '''elseifClause : ELSEIF '(' boolExpr ')' '{' subSystemStatementsOpt '}' '''
+    '''elseifClause : ELSEIF boolExpr '{' subSystemStatementsOpt '}' '''
     pass
 def p_elseClause(t):
     '''elseClause : ELSE '{' subSystemStatementsOpt '}' '''
