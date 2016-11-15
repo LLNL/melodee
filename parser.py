@@ -90,10 +90,10 @@ t_ignore_MATLAB_COMMENT = r'%.*?\n'
 
 precedence = (
     ("nonassoc", "UNITRESOLVE"),
-    ("nonassoc", "BOOLRESOLVE"),
+    #("nonassoc", "BOOLRESOLVE"),
+    #("left", '?', ':', 'TERNARY'),
     ("left", "OR"),
     ("left", "AND"),
-    #("left", '?', ':', 'TERNARY'),
     ("nonassoc", "<", ">", "BOOLEQ", "LEQ", "GEQ"),
     ('left', '+', '-'),
     ('left', '*', '/'),
@@ -261,37 +261,14 @@ def p_elseIfClausesOpt_term(t):
     pass
 
 def p_ifClause(t):
-    '''ifClause : IF boolExpr '{' subSystemStatementsOpt '}' '''
+    '''ifClause : IF '(' boolExpr  ')' '{' subSystemStatementsOpt '}' '''
     pass
 def p_elseifClause(t):
-    '''elseifClause : ELSEIF boolExpr '{' subSystemStatementsOpt '}' '''
+    '''elseifClause : ELSEIF '(' boolExpr ')' '{' subSystemStatementsOpt '}' '''
     pass
 def p_elseClause(t):
     '''elseClause : ELSE '{' subSystemStatementsOpt '}' '''
     pass
-
-#def p_boolExpr_real(t):
-#    '''boolExpr : realExpr'''
-#    pass
-#def p_realExpr_neg(t):
-#    '''realExpr : NOT realExpr '''
-#    pass
-#def p_realExpr_compare(t):
-#    '''realExpr : boolComparison'''
-#    pass
-#def p_realExpr_binary(t):
-#    '''realExpr : realExpr AND realExpr
-#                | realExpr OR realExpr
-#    '''
-#    pass
-#def p_boolCompare(t):
-#    '''boolComparison : realExpr BOOLEQ realExpr
-#                      | realExpr LEQ realExpr
-#                      | realExpr GEQ realExpr
-#                      | realExpr '<' realExpr
-#                      | realExpr '>' realExpr
-#    '''
-#    pass
 
 def p_unitExpr_literal(t):
     '''unitExpr : NAME'''
@@ -429,8 +406,8 @@ def p_realExprWithoutUnit_not(t):
     '''
     pass
 def p_realExprWithoutUnit_resolve(t):
-    '''boolExpr : realExprWithoutUnit %prec BOOLRESOLVE
-                | realExprUnclearUnit %prec BOOLRESOLVE
+    '''boolExpr : realExprWithoutUnit
+                | realExprUnclearUnit
     '''
 
 def p_realExprWithoutUnit_binop(t):
