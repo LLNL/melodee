@@ -261,10 +261,14 @@ def p_elseIfClausesOpt_term(t):
     pass
 
 def p_ifClause(t):
-    '''ifClause : IF '(' boolExpr  ')' '{' subSystemStatementsOpt '}' '''
+    '''ifClause : IF realExprUnclearUnit '{' subSystemStatementsOpt '}'
+                | IF realExprWithoutUnit '{' subSystemStatementsOpt '}'
+    '''
     pass
 def p_elseifClause(t):
-    '''elseifClause : ELSEIF '(' boolExpr ')' '{' subSystemStatementsOpt '}' '''
+    '''elseifClause : ELSEIF realExprUnclearUnit '{' subSystemStatementsOpt '}'
+                    | ELSEIF realExprWithoutUnit '{' subSystemStatementsOpt '}'
+    '''
     pass
 def p_elseClause(t):
     '''elseClause : ELSE '{' subSystemStatementsOpt '}' '''
@@ -409,10 +413,10 @@ def p_realExprWithoutUnit_not(t):
                            | NOT realExprUnclearUnit
     '''
     pass
-def p_realExprWithoutUnit_resolve(t):
-    '''boolExpr : realExprWithoutUnit
-                | realExprUnclearUnit
-    '''
+#def p_realExprWithoutUnit_resolve(t):
+#    '''boolExpr : realExprWithoutUnit
+#                | realExprUnclearUnit
+#    '''
 
 def p_realExprWithoutUnit_binop(t):
     '''realExprWithoutUnit : realExprUnclearUnit '+' realExprWithoutUnit
