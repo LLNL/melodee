@@ -403,50 +403,31 @@ class RootComponent(Component):
         self.eqns = {}
         self.subComponents = {}
         self.name = name
-        
-if __name__=="__main__":
-    import sys;
-    import os;
-    cellmlFilename = sys.argv[1];
-    root = stripNamespaces(ET.parse(cellmlFilename))
 
-    cellmlBaseUnits = {
-        "ampere" : {"A", 1},
-        "farad" : {"F", 1},
-        "katal" : {"katal", 1},
-        "lux" : {"lux", 1},
-        "pascal" : {"Pa", 1},
-        "tesla" : {"tesla", 1},
-        "becquerel" : {"becquerel", 1},
-        "gram" : {"g", 1},
-        "kelvin" : {"kelvin", 1},
-        "meter" : {"m", 1},
-        "radian" : {"radian", 1},
-        "volt" : {"V", 1},
-        "candela" : {"candela", 1},
-        "gray" : {"gray", 1},
-        "kilogram" : {"kilogram", 1},
-        "metre" : {"m", 1},
-        "second" : {"s", 1},
-        "watt" : {"watt", 1},
-        "celsius" : {"celsius", 1},
-        "henry" : {"henry", 1},
-        "liter" : {"L", 1},
-        "mole" : {"mol", 1},
-        "siemens" : {"S", 1},
-        "weber" : {"weber", 1},
-        "coulomb" : {"C", 1},
-        "hertz" : {"Hz", 1},
-        "litre" : {"L", 1},
-        "newton" : {"N", 1},
-        "sievert" : {"sievert", 1},
-        "dimensionless" : {"1", 1},
-        "joule" : {"J", 1},
-        "lumen" : {"lumen", 1},
-        "ohm" : {"ohm", 1},
-        "steradian" : {"steradian", 1}
-        }
+def printUnit(unit):
+    numeratorList = []
+    denominatorList = []
+    for (name,subExp) in unit.items():
+        if subExp == 1:
+            numeratorList.append(name)
+        elif subExp == -1:
+            denominatorList.append(name)
+        elif subExp >= 2:
+            numeratorList.append("%s^%d" % (name, subExp))
+        elif subExp <= -2:
+            denominatorList.append("%s^%d" % (name, -subExp))
+    numerator = "*".join(numeratorList)
+    denominator = "/".join(denominatorList)
+    result = numerator
+    if numerator:
+        result = numerator
+    else:
+        result = "1"
+    if denominator:
+        result += "/"+denominator
+    return result
 
+def parseUnits(units, unitElements):
     cellmlPrefixes = {
         "yotta" : "yotta",
         "zetta" : "zeta",
@@ -469,6 +450,98 @@ if __name__=="__main__":
         "zepto" : 'zepto',
         "yocto" : 'yocto',
         }
+
+    #parse all the base units
+    baseUnitElements = set([unitElement for unitElement in unitElements
+                            if unitElement.get("base_unit","no") == "yes"])
+    for unitElement in baseUnitElements:
+        units[unitElement.get("name")] = { unitElement.get("name"), 1}
+        
+    moreUnitsToParse = True
+    while moreUnitsToParse:
+        moreUnitsToParse = False
+        for unitElement in set(unitElements)-baseUnitElements:
+            if units.has_key(unitElement.get("name")):
+                continue
+            #are all the subunits for this guy defined?
+            undefinedSubunits = False
+            for subUnitElement in unitElement.findall("unit"):
+                if not units.has_key(subUnitElement.get("units")):
+                    undefinedSubunits = True
+                    break
+            if undefinedSubunits:
+                moreUnitsToParse = True
+                continue
+
+            #check for stuff we don't want to handle
+            for subUnitElement in unitElement.findall("unit"):
+                assert(float(subUnitElement.get("offset","0")) == 0)
+                assert(float(subUnitElement.get("scale","1")) == 1)
+            
+            #all the subunits are defined, so we're good to go.
+            thisUnit = {}            
+            for subUnitElement in unitElement.findall("unit"):
+                exponent = int(subUnitElement.get("exponent", "1"))
+                prefix = cellmlPrefixes.get(subUnitElement.get("prefix", ""),"")
+                subUnit = units[subUnitElement.get("units")]
+                appliedPrefix = False
+                for (name,subExp) in subUnit.items():
+                    print name, subExp, exponent
+                    if subExp > 0:
+                        thisName = prefix+name
+                        appliedPrefix = True
+                    else:
+                        thisName = name
+                    thisUnit[thisName] = thisUnit.get(thisName,0) + subExp*exponent
+                assert(appliedPrefix)
+            print unitElement.get("name"), thisUnit
+            units[unitElement.get("name")] = thisUnit
+        
+if __name__=="__main__":
+    import sys;
+    import os;
+    cellmlFilename = sys.argv[1];
+    root = stripNamespaces(ET.parse(cellmlFilename))
+
+    units = {
+        "ampere" : {"A" : 1},
+        "farad" : {"F" : 1},
+        "katal" : {"katal" : 1},
+        "lux" : {"lux" : 1},
+        "pascal" : {"Pa" : 1},
+        "tesla" : {"tesla": 1},
+        "becquerel" : {"becquerel": 1},
+        "gram" : {"g": 1},
+        "kelvin" : {"K": 1},
+        "meter" : {"m": 1},
+        "radian" : {"radian": 1},
+        "volt" : {"V": 1},
+        "candela" : {"candela": 1},
+        "gray" : {"gray": 1},
+        "kilogram" : {"kg": 1},
+        "metre" : {"m": 1},
+        "second" : {"s": 1},
+        "watt" : {"watt": 1},
+        "celsius" : {"celsius": 1},
+        "henry" : {"henry": 1},
+        "liter" : {"L": 1},
+        "mole" : {"mol": 1},
+        "siemens" : {"S": 1},
+        "weber" : {"weber": 1},
+        "coulomb" : {"C": 1},
+        "hertz" : {"Hz": 1},
+        "litre" : {"L": 1},
+        "newton" : {"N": 1},
+        "sievert" : {"sievert": 1},
+        "dimensionless" : {},
+        "joule" : {"J": 1},
+        "lumen" : {"lumen": 1},
+        "ohm" : {"ohm": 1},
+        "steradian" : {"steradian": 1}
+        }
+
+    parseUnits(units, root.findall("units"))
+    
     #get all the components from memory
     components = {}
     for element in root.findall("component"):
