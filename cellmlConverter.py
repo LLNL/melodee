@@ -58,9 +58,11 @@ def unzip(lll):
     return zip(*lll)
 
 class Equation:
-    def __init__(self, lhs, rhs, dependencies=set(), isDiff=False):
+    def __init__(self, lhs, rhs, unit=None, dependencies=set(), isDiff=False):
         self.lhs = lhs
         self.rhs = rhs
+        self.hasUnit = (unit!=None)
+        self.unit = unit
         self.dependencies = dependencies
         self.isDiff = isDiff
         self.initialCondition = None
@@ -70,14 +72,18 @@ class Equation:
         self.dependencies |= eqn.dependencies
 
     def toCode(self, out):
+        if self.hasUnit:
+            unitText = " {"+printUnit(self.unit)+"}"
+        else:
+            unitText = ""
         if self.isDiff:
             if self.initialCondition:
-                out("%s.init = %s;" % (self.lhs, self.initialCondition))
+                out("%s.init%s = %s;" % (self.lhs, unitText, self.initialCondition))
             out("%s.diff = %s;" % (self.lhs, self.rhs))
         else:
-            out("%s = %s;" % (self.lhs, self.rhs))
+            out("%s%s = %s;" % (self.lhs, unitText, self.rhs))
 
-def parseEquation(eqnElement):
+def parseEquation(eqnElement, varToUnit):
     if eqnElement[0].tag != "eq":
         print ET.tostring(eqnElement)
     assert(eqnElement[0].tag == "eq")
@@ -97,7 +103,8 @@ def parseEquation(eqnElement):
 
     (rhs, depend) = parseRhs(rhsElement)
 
-    return Equation(lhs, rhs, depend, isDiff)
+    unit = varToUnit[lhs]
+    return Equation(lhs, rhs, unit, depend, isDiff)
 
 def parseRhs(rhsElement):
     multiplicitiveOps = { "times" : "*", "divide": "/" }
@@ -153,6 +160,8 @@ def parseRhs(rhsElement):
         sep = rhsElement.find("sep")
         if sep != None:
             text += 'e'+sep.tail.strip()
+        if rhsElement.get("units",""):
+            text += "{"+printUnit(units[rhsElement.get("units")])+"}"
         return (text, set())
     elif rhsElement.tag == "true":
         return ("true", set())
@@ -244,6 +253,9 @@ class Component:
         self.eqns = {}
         diffeqns = {}
 
+        parseUnits(units, root.findall("units"))
+
+        self.varToUnit = {}
         #loop through all variables
         for var in root.findall("variable"):
             name = var.get("name")
@@ -253,12 +265,12 @@ class Component:
                 self.outputs.add(name)
 
             if var.get("initial_value"):
-                self.eqns[name] = Equation(name, var.get("initial_value"))
-
+                self.eqns[name] = Equation(name, var.get("initial_value"), units[var.get("units")])
+            self.varToUnit[name] = units[var.get("units")]
         mathElement = element.find("math")
         if mathElement:
             for eqnElement in mathElement.findall("apply"):
-                eqn = parseEquation(eqnElement)
+                eqn = parseEquation(eqnElement, self.varToUnit)
                 if eqn.isDiff:
                     diffeqns[eqn.lhs] = eqn
                 else:
@@ -270,6 +282,15 @@ class Component:
                 self.eqns[var] = diffeqns[var]
         
         self.subComponents = {}
+
+    def lookupUnit(self, var):
+        if self.varToUnit.has_key(var):
+            return printUnit(self.varToUnit[var])
+        for subComponent in self.subComponents.values():
+            possibleAnswer = subComponent.lookupUnit(var)
+            if possibleAnswer:
+                return possibleAnswer
+        return None
         
     def addSubComponent(self, subComponent):
         self.subComponents[subComponent.name] = subComponent
@@ -305,15 +326,15 @@ class Component:
         if True:
             allDecl -= declared
         for var in order(self.outputs & allDiffvars):
-            out("provides diffvar %s;" , var)
+            out("provides diffvar %s {%s};" , var, self.lookupUnit(var))
         for var in order(self.outputs & allConstants):
-            out("provides stable %s;", var)
+            out("provides stable %s {%s};", var, self.lookupUnit(var))
         for var in order(self.outputs - allDiffvars - allConstants):
-            out("provides ephemeral %s;", var)
+            out("provides ephemeral %s {%s};", var, self.lookupUnit(var))
         for var in order((allDecl - allConstants) - self.outputs - self.inputs):
-            out("shared ephemeral %s;", var)
+            out("shared ephemeral %s {%s};", var, self.lookupUnit(var))
         for var in order((allDecl & allConstants) - self.outputs - self.inputs):
-            out("shared stable %s;", var)
+            out("shared stable %s {%s};", var, self.lookupUnit(var))
 
         declared |= allDecl
 
@@ -397,9 +418,10 @@ class Component:
 
 
 class RootComponent(Component):
-    def __init__(self, name, inputs, outputs):
+    def __init__(self, name, inputs, outputs, varToUnit):
         self.inputs = inputs;
         self.outputs = outputs;
+        self.varToUnit = varToUnit;
         self.eqns = {}
         self.subComponents = {}
         self.name = name
@@ -486,7 +508,6 @@ def parseUnits(units, unitElements):
                 subUnit = units[subUnitElement.get("units")]
                 appliedPrefix = False
                 for (name,subExp) in subUnit.items():
-                    print name, subExp, exponent
                     if subExp > 0:
                         thisName = prefix+name
                         appliedPrefix = True
@@ -494,51 +515,50 @@ def parseUnits(units, unitElements):
                         thisName = name
                     thisUnit[thisName] = thisUnit.get(thisName,0) + subExp*exponent
                 assert(appliedPrefix)
-            print unitElement.get("name"), thisUnit
             units[unitElement.get("name")] = thisUnit
-        
+
+units = {
+    "ampere" : {"A" : 1},
+    "farad" : {"F" : 1},
+    "katal" : {"katal" : 1},
+    "lux" : {"lux" : 1},
+    "pascal" : {"Pa" : 1},
+    "tesla" : {"tesla": 1},
+    "becquerel" : {"becquerel": 1},
+    "gram" : {"g": 1},
+    "kelvin" : {"K": 1},
+    "meter" : {"m": 1},
+    "radian" : {"radian": 1},
+    "volt" : {"V": 1},
+    "candela" : {"candela": 1},
+    "gray" : {"gray": 1},
+    "kilogram" : {"kg": 1},
+    "metre" : {"m": 1},
+    "second" : {"s": 1},
+    "watt" : {"watt": 1},
+    "celsius" : {"celsius": 1},
+    "henry" : {"henry": 1},
+    "liter" : {"L": 1},
+    "mole" : {"mol": 1},
+    "siemens" : {"S": 1},
+    "weber" : {"weber": 1},
+    "coulomb" : {"C": 1},
+    "hertz" : {"Hz": 1},
+    "litre" : {"L": 1},
+    "newton" : {"N": 1},
+    "sievert" : {"sievert": 1},
+    "dimensionless" : {},
+    "joule" : {"J": 1},
+    "lumen" : {"lumen": 1},
+    "ohm" : {"ohm": 1},
+    "steradian" : {"steradian": 1}
+    }
+
 if __name__=="__main__":
     import sys;
     import os;
     cellmlFilename = sys.argv[1];
     root = stripNamespaces(ET.parse(cellmlFilename))
-
-    units = {
-        "ampere" : {"A" : 1},
-        "farad" : {"F" : 1},
-        "katal" : {"katal" : 1},
-        "lux" : {"lux" : 1},
-        "pascal" : {"Pa" : 1},
-        "tesla" : {"tesla": 1},
-        "becquerel" : {"becquerel": 1},
-        "gram" : {"g": 1},
-        "kelvin" : {"K": 1},
-        "meter" : {"m": 1},
-        "radian" : {"radian": 1},
-        "volt" : {"V": 1},
-        "candela" : {"candela": 1},
-        "gray" : {"gray": 1},
-        "kilogram" : {"kg": 1},
-        "metre" : {"m": 1},
-        "second" : {"s": 1},
-        "watt" : {"watt": 1},
-        "celsius" : {"celsius": 1},
-        "henry" : {"henry": 1},
-        "liter" : {"L": 1},
-        "mole" : {"mol": 1},
-        "siemens" : {"S": 1},
-        "weber" : {"weber": 1},
-        "coulomb" : {"C": 1},
-        "hertz" : {"Hz": 1},
-        "litre" : {"L": 1},
-        "newton" : {"N": 1},
-        "sievert" : {"sievert": 1},
-        "dimensionless" : {},
-        "joule" : {"J": 1},
-        "lumen" : {"lumen": 1},
-        "ohm" : {"ohm": 1},
-        "steradian" : {"steradian": 1}
-        }
 
     parseUnits(units, root.findall("units"))
     
@@ -568,14 +588,17 @@ if __name__=="__main__":
     rootInputs = set()
     rootOutputs = set()
     rootInputConstants = {}
+    rootVarToUnit = {}
     for environmentName in environmentNames:
         if environmentName in components:
             for var in components[environmentName].outputConstants():
                 rootInputConstants[var] = components[environmentName].eqns[var]
             rootInputs |= components[environmentName].outputs-set(rootInputConstants.keys())
             rootOutputs |= components[environmentName].inputs
+            for (name, unit) in components[environmentName].varToUnit.items():
+                rootVarToUnit[name] = unit
     (rootName, rootExt) = os.path.splitext(os.path.basename(sys.argv[1]))
-    root = RootComponent(rootName, rootInputs, rootOutputs)
+    root = RootComponent(rootName, rootInputs, rootOutputs, rootVarToUnit)
     root.eqns = rootInputConstants
     for component in components.values():
         if component.name not in environmentNames and component not in allChildren:
@@ -583,5 +606,5 @@ if __name__=="__main__":
     
     out = Indenter(sys.stdout)
     for var in root.inputs:
-        out("shared ephemeral %s;" % var)
+        out("shared ephemeral %s {%s};", var, printUnit(rootVarToUnit[var]))
     root.toCode(out)
