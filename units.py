@@ -19,6 +19,10 @@ class Unit:
             elif other.bases[base] != power:
                 return False
         return True
+    def __eq__(self, other):
+        return self.isCompatibleWith(other) and self.scale == other.scale
+    def __ne__(self, other):
+        return not self==other
     def copy(self):
         basesCopy = dict(self.bases)
         return Unit(self.system, basesCopy, self.scale)
@@ -44,6 +48,8 @@ class Unit:
         return ret
     def __str__(self):
         return "["+str(self.scale)+" ,"+str(self.bases)+"]"
+    def __repr__(self):
+        return 'Unit(si,'+repr(self.bases)+','+repr(self.scale)+')'
     def convertTo(self, other):
         '''
         Gives factor so that self * factor = providedUnit
@@ -80,6 +86,7 @@ class Si(UnitSystem):
 
         x='unitless'; self.register(x, self.scaleToUnit(1))
         x='dimensionless'; self.register(x, self.unitless)
+        x='1'; self.register(x, self.unitless)
 
         x='L'; s.append(x); self.register(x, self.m**3 * self.scaleToUnit(1e-3))
         x='liter'; l.append(x); self.register(x, self.L)
