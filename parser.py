@@ -277,10 +277,21 @@ class Parser:
         '''nameList : NAME ',' nameList'''
         pass
 
-    def p_subSystemDefinition(self, p):
-        '''subSystemDefinition : SUBSYSTEM '{' subSystemStatementsOpt '}' '''
-        pass
+    def scopeBegin(self):
+        #start a new table
+        newTable = SymbolTable(self.currentTable)
+        self.currentTable = newTable
+        #start a new block
+    def scopeEnd(self):
+        completedTable = self.currentTable
+        self.currentTable = self.currentTable.parent
+        return completedTable
 
+    def p_subSystemDefinition(self, p):
+        '''subSystemDefinition : SUBSYSTEM '{' scopeBegin subSystemStatementsOpt '}' '''
+    def p_subSystemBegin(self, p):
+        '''scopeBegin : empty'''
+        self.scopeBegin()
     def p_subSystemStatementsOpt(self, p):
         '''subSystemStatementsOpt : subSystemStatement subSystemStatementsOpt
                                   | empty 
@@ -359,15 +370,20 @@ class Parser:
 
     def p_assignDef_withoutUnit(self, p):
         '''assignDef : var '=' realExpr ';' '''
-        pass
+        p[0] = self.assign(p[1], p[3])
     def p_assignDef(self, p):
         '''assignDef : var '{' unitExpr '}' '=' realExpr ';' '''
-        pass
+        p[0] = self.assign(p[1], p[5], p[3])
     def p_accumDef(self, p):
         '''accumDef : var PLUSEQ realExpr ';'
                     | var MINUSEQ realExpr ';'
         '''
-        pass
+        if not self.varDefined(p[1]):
+            raise SyntaxError("Assigning to an undefined variable '"+p[1]+"'!")
+        rhs = p[3]
+        if p[2] == 'MINUSEQ':
+            rhs = AST(sympy.Mul(sympy.Integer(-1),rhs.sympy, rhs.unit))
+        p[0] = self.assign(p[1], AST(sympy.Add(rhs),self.getVar(lhs),self.checkExactUnits()))
 
     def p_subSystemStatement_diffDef(self, p):
         '''subSystemStatement : diffDef'''
@@ -385,32 +401,31 @@ class Parser:
 
     def p_ifStatement_noElse(self, p):
         '''ifStatement : ifClauses'''
-        pass
+        self.processIf(p[0])
     def p_ifStatement_else(self, p):
         '''ifStatement : ifClauses elseClause'''
-        pass
+        self.processIf(p[0] + [(None, p[2])])
     def p_ifClauses(self, p):
         '''ifClauses : ifClause elseifClausesOpt'''
-        pass
-
+        p[0] = [p[1]] + p[2]
     def p_elseifClausesOpt(self, p):
         '''elseifClausesOpt : elseifClause elseifClausesOpt'''
-        pass
+        p[0] = [p[1]] + p[2]
     def p_elseIfClausesOpt_term(self, p):
         '''elseifClausesOpt : empty'''
-        pass
+        p[0] = []
 
     def p_ifClause(self, p):
-        '''ifClause : IF realExpr '{' subSystemStatementsOpt '}'
+        '''ifClause : IF realExpr '{' scopeBegin subSystemStatementsOpt '}'
         '''
-        pass
+        p[0] = (p[2], p[5])
     def p_elseifClause(self, p):
-        '''elseifClause : ELSEIF realExpr '{' subSystemStatementsOpt '}'
+        '''elseifClause : ELSEIF realExpr '{' scopeBegin subSystemStatementsOpt '}'
         '''
-        pass
+        p[0] = (p[2], p[5])
     def p_elseClause(self, p):
-        '''elseClause : ELSE '{' subSystemStatementsOpt '}' '''
-        pass
+        '''elseClause : ELSE '{' scopeBegin subSystemStatementsOpt '}' '''
+        p[0] = p[4]
 
         
     def p_subSystemStatement_use(self, p):
@@ -524,7 +539,7 @@ class Parser:
         p[0] = p[1]
     def p_ternaryOp_impl(self, p):
         '''ternaryExpr : orExpr '?' realExpr ':' ternaryExpr'''
-        pass
+        pass #FIXME
 
     def p_orExpr_pass(self,p):
         '''orExpr : andExpr'''
@@ -664,7 +679,7 @@ class Parser:
 
     def p_primaryExpr_var(self, p):
         '''primaryExpr : var'''
-        v = self.currentTable.create(p[1])
+        v = self.currentTable.create(p[1]) #FIXME, should be table lookup.
         p[0] = AST(v.sympy, ASTUnit(v.unit,explicit=False))
     def p_primaryExpr_boolLiteral(self, p):
         '''primaryExpr : boolLiteral
