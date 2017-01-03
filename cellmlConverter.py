@@ -325,17 +325,20 @@ class Component:
         #separate those declared variables into computed and state
         if True:
             allDecl -= declared
+        localDiffvars = self.localDiffvars() - self.outputs
         for var in order(self.outputs & allDiffvars):
             out("provides diffvar %s {%s};" , var, self.lookupUnit(var))
         for var in order(self.outputs & allConstants):
             out("provides stable %s {%s};", var, self.lookupUnit(var))
         for var in order(self.outputs - allDiffvars - allConstants):
             out("provides ephemeral %s {%s};", var, self.lookupUnit(var))
-        for var in order((allDecl - allConstants) - self.outputs - self.inputs):
+        for var in order((allDecl - allConstants) - self.outputs - self.inputs - localDiffvars):
             out("shared ephemeral %s {%s};", var, self.lookupUnit(var))
-        for var in order((allDecl & allConstants) - self.outputs - self.inputs):
+        for var in order((allDecl & allConstants) - self.outputs - self.inputs - localDiffvars):
             out("shared stable %s {%s};", var, self.lookupUnit(var))
-
+        for var in order(localDiffvars):
+            out("diffvar %s {%s};", var, self.lookupUnit(var))
+            
         declared |= allDecl
 
         #find all the differential variables
