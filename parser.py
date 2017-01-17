@@ -38,6 +38,23 @@ class ASTUnit:
     def null():
         return ASTUnit(None, False)
 
+class VarAttributes:
+    def __init__(self, varList=[]):
+        self.attributes = {}
+        for var in varList:
+            self.add(var)
+    def make_a(self, var, tag, info):
+        tagAttr = self.attributes.get(tag, {})
+        tagAttr[var] = info
+    def is_a(self, var, tag):
+        return self.attributes.get(tag, {}).has_key(var)
+    def info(self, var, tag):
+        assert(self.is_a(var, tag))
+        return self.attributes[tag][var]
+    def find(self, tag):
+        return self.attributes.get(tag, {}).keys()
+
+
 class SymbolTable:
     def __init__(self, parent=None):
         self.parent = parent
