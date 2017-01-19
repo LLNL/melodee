@@ -149,8 +149,9 @@ class Parser:
         "subsystem" : "SUBSYSTEM",
         "pow" : "POW",
         "convert" : "CONVERT",
-        #"rename" : "RENAME",
-        #"to" : "TO",
+        
+        "integrate" : "INTEGRATE",
+
         #"from" : "FROM",
     }
 
@@ -236,9 +237,15 @@ class Parser:
     def p_topLevelStatement(self, p):
         '''topLevelStatement : sharedStatement
                              | subSystemDefinition
+                             | integrateStatement
         '''
         pass
 
+    def p_integrateStatement(self, p):
+        '''integrateStatement : INTEGRATE var '{' unitExpr '}' ';'
+        '''
+        pass
+    
     def p_sharedStatement_unit(self, p):
         '''sharedStatement : SHARED STABLE var '{' unitExpr '}' ';'
                            | SHARED EPHEMERAL var '{' unitExpr '}' ';'
