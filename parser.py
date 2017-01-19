@@ -152,7 +152,10 @@ class Parser:
         
         "integrate" : "INTEGRATE",
 
+        "use" : "USE",
         #"from" : "FROM",
+
+        #"unit" : "UNIT",
     }
 
     tokens = (
@@ -171,9 +174,11 @@ class Parser:
         "NUMBER",
         "NAME",
         "ONE",
+        "PLUSPERCENTEQ",
+        "MINUSPERCENTEQ",
     ) + tuple(reserved.values())
 
-    literals = "(){}<>!;?:+-/*^=.,"
+    literals = "(){}<>!;?:+-/*^=.,~"
 
     def t_AND(self, t):
         r'(?:and)|(?:&&)'
@@ -206,7 +211,9 @@ class Parser:
     t_TIMESEQ = r'\*='
     t_DIVIDEEQ = r'/='
     t_EXPONEQ = r'^='
-
+    t_PLUSPERCENTEQ = r'\+%='
+    t_MINUSPERCENTEQ = r'-%='
+    
     t_ignore_CPP_COMMENT = r'//.*?\n'
     t_ignore_C_COMMENT = r'/\*.*?\*/'
     t_ignore_PYTHON_COMMENT = r'\#.*?\n'
@@ -219,10 +226,10 @@ class Parser:
         #("left", "OR"),
         #("left", "AND"),
         #("nonassoc", "<", ">", "BOOLEQ", "LEQ", "GEQ", "NEQ"),
-        #('left', '+', '-'),
+        ('left', '+', '-'),
         ('left', '*', '/'),
         #('right', 'ANNOTATE_UNIT'),
-        #('right', 'NOT', 'UMINUS'),
+        ('right', 'UMINUS'),
         ('left', '^'),
        )
 
@@ -404,6 +411,76 @@ class Parser:
     def p_elseClause(self, p):
         '''elseClause : ELSE '{' subSystemStatementsOpt '}' '''
         pass
+
+        
+    def p_subSystemStatement_use(self, p):
+        '''subSystemStatement : useStatement'''
+        pass
+    def p_useStatement(self, p):
+        '''useStatement : USE useList '{' useBlockStatementList '}' '''
+        pass
+    def p_useList_default(self, p):
+        '''useList : speccedName'''
+        pass
+    def p_useList_subtract(self, p):
+        '''useList : useList '-' speccedName'''
+        pass
+    def p_speccedName_default(self, p):
+        '''speccedName : NAME'''
+        pass
+    def p_specceedName_specified(self, p):
+        '''speccedName : speccedName '.' NAME'''
+        pass
+    def p_useBlockStatementList_single(self, p):
+        '''useBlockStatementList : useBlockStatement'''
+        pass
+    def p_useBlockStatementList_mult(self, p):
+        '''useBlockStatementList : useBlockStatementList useBlockStatement'''
+        pass
+    def p_useBlockStatement_explicitBindLeft(self, p):
+        '''useBlockStatement : NAME '~' '.' speccedName ';' '''
+        pass
+    def p_useBlockStatement_explicitBindRight(self,p):
+        '''useBlockStatement : '.' speccedName '~' NAME ';' '''
+        pass
+    def p_useBlockStatement_simpleBind(self,p):
+        '''useBlockStatement : '~' NAME ';' '''
+        pass
+    def p_useBlockStatement_implicitBind(self,p):
+        '''useBlockStatement : '~' '*' ';' '''
+        pass
+    def p_useBlockStatement_parameterSet(self, p):
+        '''useBlockStatement : '.' speccedName useOp useExpr ';' '''
+        pass
+    def p_useOp(self, p):
+        '''useOp : '='
+                 | PLUSEQ
+                 | MINUSEQ
+                 | PLUSPERCENTEQ
+                 | MINUSPERCENTEQ
+                 | TIMESEQ
+                 | DIVIDEEQ
+        '''
+        pass
+    def p_useExpr_literal(self,p):
+        '''useExpr : numberLiteralPlusOpt '''
+        pass
+    def p_useExpr_boolop(self,p):
+        '''useExpr : useExpr '+' useExpr
+                   | useExpr '-' useExpr
+                   | useExpr '*' useExpr
+                   | useExpr '/' useExpr
+                   | useExpr '^' useExpr
+        '''
+        pass
+    def p_useExpr_uminus(self,p):
+        '''useExpr : '-' useExpr %prec UMINUS'''
+        pass
+
+    def p_useBlockStatement_flagSet(self, p):
+        '''useBlockStatement : '.' speccedName '=' NAME ';' '''
+        pass
+
 
     def p_unitExpr_literal(self, p):
         '''unitExpr : NAME'''
