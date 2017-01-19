@@ -249,13 +249,13 @@ class Parser:
         pass
 
     def p_integrateStatement(self, p):
-        '''integrateStatement : INTEGRATE var '{' unitExpr '}' ';'
+        '''integrateStatement : INTEGRATE var unitDef ';'
         '''
         pass
     
     def p_sharedStatement_unit(self, p):
-        '''sharedStatement : SHARED STABLE var '{' unitExpr '}' ';'
-                           | SHARED EPHEMERAL var '{' unitExpr '}' ';'
+        '''sharedStatement : SHARED STABLE var unitDef ';'
+                           | SHARED EPHEMERAL var unitDef ';'
         '''
         pass
     def p_sharedStatement_flag(self, p):
@@ -333,12 +333,12 @@ class Parser:
         '''
         pass
     def p_providesStatement_DeclSubUnit(self, p):
-        '''providesStatement : PROVIDES ACCUM var '{' unitExpr '}' ';'
-                             | PROVIDES DIFFVAR var '{' unitExpr '}' ';'
-                             | PROVIDES PARAM var '{' unitExpr '}' ';'
-                             | PROVIDES STABLE var '{' unitExpr '}' ';'
-                             | PROVIDES EPHEMERAL var '{' unitExpr '}' ';'
-                             | PROVIDES var '{' unitExpr '}' ';'
+        '''providesStatement : PROVIDES ACCUM var unitDef ';'
+                             | PROVIDES DIFFVAR var unitDef ';'
+                             | PROVIDES PARAM var unitDef ';'
+                             | PROVIDES STABLE var unitDef ';'
+                             | PROVIDES EPHEMERAL var unitDef ';'
+                             | PROVIDES var unitDef ';'
         '''
         pass
 
@@ -372,8 +372,8 @@ class Parser:
         '''assignDef : var '=' realExpr ';' '''
         p[0] = self.assign(p[1], p[3])
     def p_assignDef(self, p):
-        '''assignDef : var '{' unitExpr '}' '=' realExpr ';' '''
-        p[0] = self.assign(p[1], p[5], p[3])
+        '''assignDef : var unitDef '=' realExpr ';' '''
+        p[0] = self.assign(p[1], p[4], p[2])
     def p_accumDef(self, p):
         '''accumDef : var PLUSEQ realExpr ';'
                     | var MINUSEQ realExpr ';'
@@ -496,6 +496,12 @@ class Parser:
         '''useBlockStatement : '.' speccedName '=' NAME ';' '''
         pass
 
+    #def p_unitDefBar(self, p):
+    #    '''unitDefBar : unitExpr '|' '''
+    #    p[0] = p[1]
+    def p_unitDefBracket(self, p):
+        '''unitDef : '{' unitExpr '}' '''
+        p[0] = p[2]
 
     def p_unitExpr_literal(self, p):
         '''unitExpr : NAME'''
@@ -631,8 +637,8 @@ class Parser:
         '''unitLabelExpr : exponentExpr'''
         p[0] = p[1]
     def p_unitExpr_impl(self, p):
-        '''unitLabelExpr : exponentExpr '{' unitExpr '}' '''
-        newUnit = ASTUnit(p[3],explicit=True)
+        '''unitLabelExpr : exponentExpr unitDef '''
+        newUnit = ASTUnit(p[2],explicit=True)
         if not p[1].unit.isNull():
             self.checkExactUnits(p[1].unit, newUnit)
         p[0] = AST(p[1].sympy, newUnit)
