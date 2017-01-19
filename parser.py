@@ -416,13 +416,13 @@ class Parser:
         p[0] = []
 
     def p_ifClause(self, p):
-        '''ifClause : IF realExpr '{' scopeBegin subSystemStatementsOpt '}'
+        '''ifClause : IF '(' realExpr ')' '{' scopeBegin subSystemStatementsOpt '}'
         '''
-        p[0] = (p[2], p[5])
+        p[0] = (p[3], p[7])
     def p_elseifClause(self, p):
-        '''elseifClause : ELSEIF realExpr '{' scopeBegin subSystemStatementsOpt '}'
+        '''elseifClause : ELSEIF '(' realExpr ')' '{' scopeBegin subSystemStatementsOpt '}'
         '''
-        p[0] = (p[2], p[5])
+        p[0] = (p[3], p[7])
     def p_elseClause(self, p):
         '''elseClause : ELSE '{' scopeBegin subSystemStatementsOpt '}' '''
         p[0] = p[4]
@@ -754,3 +754,5 @@ and && or || not ! 0 2.0 .3 40. 5e+6 if myID */* bljsadfj */ */
     print p.parse("1 {ms}+ c {ms}")
     print p.parse("convert(1 {ms}, s)+ c {s}")
     print p.parse("a == b")
+
+    p = Parser(start="topLevelStatementsOpt")
