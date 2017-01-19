@@ -542,7 +542,7 @@ class Parser:
         '''exponentExpr : functionExpr'''
         p[0] = p[1]
     def p_exponentExpr_impl(self, p):
-        '''exponentExpr : functionExpr '^' exponentExpr'''
+        '''exponentExpr : exponentExpr '^' functionExpr'''
         p[0] = self.powerProcess(p[1], p[3])
 
     def p_functionExpr_impl(self,p):
