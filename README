@@ -17,3 +17,8 @@ Included in this package are the following files:
   * A CellML conversion tool that converts XML-based [CellML models](http://cellml.org) to the MELODEE syntax
 * TT06.mel
   * A MELODEE file describing TT06, converted from the [following CellML model](https://models.physiomeproject.org/exposure/a7179d94365ff0c9c0e6eb7c6a787d3d/ten_tusscher_model_2006_IK1Ko_endo_units.cellml/view). The generated MELODEE code was then cleaned up and modified to show off more MELODEE features.
+
+Requirements:
+* Python - language everything is written in
+* PLY - for LR parsing
+* sympy - for symobolic expression manipulation
