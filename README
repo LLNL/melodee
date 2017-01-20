@@ -2,8 +2,7 @@
 Modular Expression Language for Ordinary Differential Equation Editing
 ----------------------------------------------------------------------
 
-Author: Robert Clayton Blake III, Lawrence Livermore National
-Laboratory <blake14@llnl.gov>
+Author: Robert Clayton Blake III, Lawrence Livermore National Laboratory <blake14@llnl.gov>
 
 Melodee is a new language for ODE modeling and development. It has been designed to make it easy for domain experts to write modular equation systems.  Using a familiar Matlab-like syntax, modelers can describe their systems of interests and combine them in new and novel ways at run time.  Existing models can easily be converted to MELODEE because of its familiar semantics and syntax.
 
