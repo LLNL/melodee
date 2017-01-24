@@ -39,10 +39,11 @@ class InstructionList(list):
         self.append(instruction)
 
 class IfInstruction:
-    def __init__(self, ifVar, thenInstructions, elseInstructions):
+    def __init__(self, ifVar, thenInstructions, elseInstructions, choiceInstructions):
         self.ifVar = ifVar
         self.thenInstructions = thenInstructions
         self.elseInstructions = elseInstructions
+        self.choiceInstructions = choiceInstructions
 
 class Choice:
     def __init__(self, ifVar, thenVar, elseVar, unit):
@@ -587,10 +588,14 @@ class Parser:
         p[0] = p[1]
     def p_ternaryOp_impl(self, p):
         '''ternaryExpr : ternaryIf ternaryThen ternaryElse'''
-        self.currentInstructions().addInstruction(IfInstruction(p[0],p[1][2], p[2][2]))
         resultUnit = self.checkExactUnits(p[1][1],p[2][1])
         ast = Choice(p[0],p[1][0],p[2][0],resultUnit)
+
+        self.instructionStack.append(InstructionList())
         (var,unit) = self.astToTemp(ast)
+        choiceInstructions = self.instructionStack.pop()
+
+        self.currentInstructions().addInstruction(IfInstruction(p[0],p[1][2], p[2][2]),choiceInstructions)
         p[0] = AST(var,unit)
         
     def p_ternaryIf(self, p):
