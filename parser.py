@@ -143,7 +143,19 @@ class Parser:
     
     def parse(self, s):
         return self.parser.parse(s)
-                                    
+
+    def scopeBegin(self):
+        #start a new table
+        pass
+    def scopeEnd(self):
+        pass
+    
+    def astToTemp(self, ast):
+        ast = p[1]
+        var = self.newTempVar()
+        self.currentSubsystem().ssa[var] = ast
+        self.currentInstructions().addInstruction(var)
+        return (var,ast.unit)
     
     t_ignore = " \t"
                                     
@@ -302,12 +314,6 @@ class Parser:
         '''nameList : NAME ',' nameList'''
         pass
 
-    def scopeBegin(self):
-        #start a new table
-        pass
-    def scopeEnd(self):
-        pass
-    
     def p_subSystemDefinition(self, p):
         '''subSystemDefinition : subSystemBegin subSystemStatementsOpt '}' '''
         self.currentSubsystem().instructions = self.instructionStack.pop()
@@ -586,13 +592,6 @@ class Parser:
         ast = Choice(p[0],p[1][0],p[2][0],resultUnit)
         (var,unit) = self.astToTemp(ast)
         p[0] = AST(var,unit)
-
-    def astToTemp(self, ast):
-        ast = p[1]
-        var = self.newTempVar()
-        self.currentSubsystem().ssa[var] = ast
-        self.currentInstructions().addInstruction(var)
-        return (var,ast.unit)
         
     def p_ternaryIf(self, p):
         '''ternaryIf : orExpr '?' '''
