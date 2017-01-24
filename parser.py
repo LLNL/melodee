@@ -476,16 +476,16 @@ class Parser:
         pass
     def p_useList_default(self, p):
         '''useList : speccedName'''
-        pass
+        p[0] = (p[1],set())
     def p_useList_subtract(self, p):
         '''useList : useList '-' speccedName'''
-        pass
+        p[0] = (p[1][0], p[1][1] | set([p[2]]))
     def p_speccedName_default(self, p):
         '''speccedName : NAME'''
-        pass
+        p[0] = p[1]
     def p_specceedName_specified(self, p):
         '''speccedName : speccedName '.' NAME'''
-        pass
+        p[0] = p[1] + '.' + p[2]
     def p_useBlockStatementList_single(self, p):
         '''useBlockStatementList : useBlockStatement'''
         pass
