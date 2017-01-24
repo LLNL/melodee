@@ -499,10 +499,10 @@ class Parser:
         '''useBlockStatement : '.' speccedName '~' NAME ';' '''
         pass
     def p_useBlockStatement_simpleBind(self,p):
-        '''useBlockStatement : '~' NAME ';' '''
+        '''useBlockStatement : '~' '.' NAME ';' '''
         pass
     def p_useBlockStatement_implicitBind(self,p):
-        '''useBlockStatement : '~' '*' ';' '''
+        '''useBlockStatement : '~' '.' ';' '''
         pass
     def p_useBlockStatement_parameterSet(self, p):
         '''useBlockStatement : '.' speccedName useOp useExpr ';' '''
