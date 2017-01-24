@@ -28,11 +28,38 @@ import ply.yacc as yacc
 import sympy
 import units
 
-class Var:
-    def __init__(self, name, unit):
-        self.name = name
-        self.sympy = sympy.symbols(name)
+class SSA(dict):
+    def __setitem__(self, key, value):
+        if key in self:
+            raise MultipleSymbolAssignment(key)
+        self[key]=value
+
+class InstructionList(list):
+    def addInstruction(self, instruction):
+        self.append(instruction)
+
+class IfInstruction:
+    def __init__(self, ifVar, thenInstructions, elseInstructions):
+        self.ifVar = ifVar
+        self.thenInstructions = thenInstructions
+        self.elseInstructions = elseInstructions
+
+class Choice:
+    def __init__(self, ifVar, thenVar, elseVar, unit):
+        self.ifVar = ifVar
+        self.thenVar = thenVar
+        self.elseVar = elseVar
         self.unit = unit
+
+class AST:
+    def __init__(self, sympyExpr, unit=None):
+        self.sympy = sympyExpr
+        self.unit = unit
+    def __repr__(self):
+        return 'AST(sympify(' + repr(self.sympy) +'), '+ repr(self.unit) +')'
+
+def textToAST(text, unit):
+    return AST(sympy.sympify(text), unit)
 
 class ASTUnit:
     def __init__(self, unit, explicit):
@@ -61,59 +88,11 @@ class ASTUnit:
     def null():
         return ASTUnit(None, False)
 
-class VarAttributes:
-    def __init__(self, varList=[]):
-        self.attributes = {}
-        for var in varList:
-            self.add(var)
-    def make_a(self, var, tag, info):
-        tagAttr = self.attributes.get(tag, {})
-        tagAttr[var] = info
-    def is_a(self, var, tag):
-        return self.attributes.get(tag, {}).has_key(var)
-    def info(self, var, tag):
-        assert(self.is_a(var, tag))
-        return self.attributes[tag][var]
-    def find(self, tag):
-        return self.attributes.get(tag, {}).keys()
 
-
-class SymbolTable:
-    def __init__(self, parent=None):
-        self.parent = parent
-        self.localNames = {}
-    def lookup(self, name):
-        if name in self.localNames:
-            return self.localNames[name]
-        elif self.parent==None:
-            return None
-        else:
-            return self.parent.lookup(name)
-    def create(self, name, unit=None):
-        v = Var(name, unit)
-        self.localNames[name] = v
-        return v
-    
-class Statement:
-    def __init__(self, lhs, rhs):
-        self.lhs = lhs
-        self.rhs = rhs
-
-class BasicBlock:
-    def __init__(self):
-        self.instructions = []
-        self.conditionalExit = {}
-        self.unconditionalExit = None
-
-class AST:
-    def __init__(self, sympyExpr, unit=None):
-        self.sympy = sympyExpr
-        self.unit = unit
-    def __repr__(self):
-        return 'AST(sympify(' + repr(self.sympy) +'), '+ repr(self.unit) +')'
-
-def textToAST(text, unit):
-    return AST(sympy.sympify(text), unit)
+class Subsystem:
+    def __init__(self, name):
+        self.name = name
+        self.ssa = SSA()
 
 class Parser:
     def __init__(self, **kw):
@@ -126,8 +105,14 @@ class Parser:
                                 start=self.start,
         )
         self.si = units.Si()
-        self.currentTable = SymbolTable()
+        self.subsystemStack = []
+        self.instructionStack = []
 
+    def currentSubsystem(self):
+        return self.subsystemStack[-1]
+    def currentInstructions(self):
+        return self.instructionStack[-1]
+        
     def nodim(self):
         return ASTUnit(self.si.get("1"), False)
 
@@ -319,19 +304,26 @@ class Parser:
 
     def scopeBegin(self):
         #start a new table
-        newTable = SymbolTable(self.currentTable)
-        self.currentTable = newTable
-        #start a new block
+        pass
     def scopeEnd(self):
-        completedTable = self.currentTable
-        self.currentTable = self.currentTable.parent
-        return completedTable
-
+        pass
+    
     def p_subSystemDefinition(self, p):
-        '''subSystemDefinition : SUBSYSTEM '{' scopeBegin subSystemStatementsOpt '}' '''
+        '''subSystemDefinition : subSystemBegin subSystemStatementsOpt '}' '''
+        self.currentSubsystem().instructions = self.instructionStack.pop()
+        p[0] = self.subsystemStack.pop()
     def p_subSystemBegin(self, p):
+        '''subSystemBegin : SUBSYSTEM NAME '{' '''
+        thisName = p[2]
+        if self.subsystemStack:
+            thisName = self.currentSubsystem().name + "." + thisName
+        self.subsystemStack.append(Subsystem(name))
+        self.instructionStack.append(InstructionList())
+        
+    def p_scopeBegin(self, p):
         '''scopeBegin : empty'''
-        self.scopeBegin()
+        pass
+        
     def p_subSystemStatementsOpt(self, p):
         '''subSystemStatementsOpt : subSystemStatement subSystemStatementsOpt
                                   | empty 
@@ -390,7 +382,18 @@ class Parser:
         pass
 
     def p_subSystemStatement_definition(self, p):
-        '''subSystemStatement : varDef ';' '''
+        '''subSystemStatement : conditionalStatement '''
+        pass
+
+    def p_conditionalStatementsOpt_root(self, p):
+        '''conditionalStatementsOpt : empty'''
+        pass
+    def p_conditionalStatementsOpt_recuse(self, p):
+        '''conditionalStatementsOpt : conditionalStatementsOpt conditionalStatement'''
+        pass
+
+    def p_conditionalStatement_vars(self, p):
+        '''conditionalStatement : varDef'''
         pass
 
     def p_varDef_assign(self, p):
@@ -425,9 +428,8 @@ class Parser:
             rhs = AST(sympy.Mul(sympy.Integer(-1),rhs.sympy, rhs.unit))
         p[0] = self.assign(p[1], AST(sympy.Add(rhs),self.getVar(lhs),self.checkExactUnits()))
 
-    def p_subSystemStatement_diffDef(self, p):
-        '''subSystemStatement : diffDef'''
-        pass
+    def p_conditionalStatement_diffs(self, p):
+        '''conditionalStatement : diffDef'''
 
     def p_diffDef(self, p):
         '''diffDef : var '.' INIT '=' realExpr ';'
@@ -436,38 +438,32 @@ class Parser:
         pass
 
     def p_subSystemStatement_if(self, p):
-        '''subSystemStatement : ifStatement'''
+        '''conditionalStatement : ifStatement'''
         pass
 
-    def p_ifStatement_noElse(self, p):
-        '''ifStatement : ifClauses'''
-        self.processIf(p[0])
-    def p_ifStatement_else(self, p):
-        '''ifStatement : ifClauses elseClause'''
-        self.processIf(p[0] + [(None, p[2])])
-    def p_ifClauses(self, p):
-        '''ifClauses : ifClause elseifClausesOpt'''
-        p[0] = [p[1]] + p[2]
-    def p_elseifClausesOpt(self, p):
-        '''elseifClausesOpt : elseifClause elseifClausesOpt'''
-        p[0] = [p[1]] + p[2]
-    def p_elseIfClausesOpt_term(self, p):
-        '''elseifClausesOpt : empty'''
-        p[0] = []
+    def p_ifStatement(self, p):
+        '''ifStatement : initialIfCond thenBody elseOpt'''
+        pass
+    def p_initialIfCond(self,p):
+        '''initialIfCond : IF '(' realExprToTemp ')' '''
+        p[0] = p[2]
+    def p_thenBody(self,p):
+        '''thenBody : '{' scopeBegin conditionalStatementsOpt '}' '''
+        pass
+    def p_elseOpt_empty(self,p):
+        '''elseOpt : empty '''
+        pass
+    def p_elseOpt_final(self, p):
+        '''elseOpt : ELSE '{' scopeBegin conditionalStatementsOpt '}' '''
+        pass
+    def p_elseOpt_continue(self, p):
+        '''elseOpt : elseIfCond thenBody elseOpt'''
+        pass
+    def p_elseIfCond(self, p):
+        '''elseIfCond : pushNewInstructionList ELSEIF '(' realExprToTemp ')' '''
+        pass
 
-    def p_ifClause(self, p):
-        '''ifClause : IF '(' realExpr ')' '{' scopeBegin subSystemStatementsOpt '}'
-        '''
-        p[0] = (p[3], p[7])
-    def p_elseifClause(self, p):
-        '''elseifClause : ELSEIF '(' realExpr ')' '{' scopeBegin subSystemStatementsOpt '}'
-        '''
-        p[0] = (p[3], p[7])
-    def p_elseClause(self, p):
-        '''elseClause : ELSE '{' scopeBegin subSystemStatementsOpt '}' '''
-        p[0] = p[4]
 
-        
     def p_subSystemStatement_use(self, p):
         '''subSystemStatement : useStatement'''
         pass
@@ -577,16 +573,51 @@ class Parser:
     ############################################
 
     def p_realExpr_pass(self,p):
-        '''realExpr : orExpr'''
+        '''realExpr : ternaryExpr'''
         p[0] = p[1]
 
     def p_ternaryOp_pass(self, p):
         '''ternaryExpr : orExpr'''
         p[0] = p[1]
     def p_ternaryOp_impl(self, p):
-        '''ternaryExpr : orExpr '?' realExpr ':' ternaryExpr'''
-        pass #FIXME
+        '''ternaryExpr : ternaryIf ternaryThen ternaryElse'''
+        self.currentInstructions().addInstruction(IfInstruction(p[0],p[1][2], p[2][2]))
+        resultUnit = self.checkExactUnits(p[1][1],p[2][1])
+        ast = Choice(p[0],p[1][0],p[2][0],resultUnit)
+        (var,unit) = self.astToTemp(ast)
+        p[0] = AST(var,unit)
 
+    def astToTemp(self, ast):
+        ast = p[1]
+        var = self.newTempVar()
+        self.currentSubsystem().ssa[var] = ast
+        self.currentInstructions().addInstruction(var)
+        return (var,ast.unit)
+        
+    def p_ternaryIf(self, p):
+        '''ternaryIf : orExpr '?' '''
+        (var, unit) = self.astToTemp(p[1])
+        p[0] = var
+
+    def p_realExprToTemp(self,p):
+        '''realExprToTemp : realExpr'''
+        p[0] = self.astToTemp(p[1])
+        
+    def p_ternaryThen(self, p):
+        '''ternaryThen : pushNewInstructionList realExprToTemp'''
+        (var,unit) = p[2]
+        instructions = self.instructionStack.pop()
+        p[0] = (var,unit,instructions)
+    def p_ternaryElse(self, p):
+        '''ternaryElse : ':' pushNewInstructionList realExprToTemp'''
+        (var,unit) = p[3]
+        instructions = self.instructionStack.pop()
+        p[0] = (var,unit,instructions)
+        
+    def p_pushNewInstructionList(self, p):
+        '''pushNewInstructionList : empty'''
+        self.instructionStack.append(InstructionList())
+        
     def p_orExpr_pass(self,p):
         '''orExpr : andExpr'''
         p[0] = p[1]
@@ -725,8 +756,8 @@ class Parser:
 
     def p_primaryExpr_var(self, p):
         '''primaryExpr : var'''
-        v = self.currentTable.create(p[1]) #FIXME, should be table lookup.
-        p[0] = AST(v.sympy, ASTUnit(v.unit,explicit=False))
+        v = sympy.symbols(p[1]) #FIXME, should be table lookup.
+        p[0] = AST(v, ASTUnit(None,explicit=False))
     def p_primaryExpr_boolLiteral(self, p):
         '''primaryExpr : boolLiteral
         '''
