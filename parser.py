@@ -89,11 +89,27 @@ class ASTUnit:
     def null():
         return ASTUnit(None, False)
 
+class SymbolTable(dict):
+    def __init__(self, parent=None):
+        self.parent = parent
+        dict.__init__(self)
+    def __getitem__(self, key):
+        if not dict.__contains__(self,key):
+            if self.parent != None:
+                return self.parent[key]
+        return self[key]
+    def __contains__(self, key):
+        try:
+            self.__getitem__[key]
+        except KeyError,e:
+            return False
+        return True
 
 class Subsystem:
     def __init__(self, name):
         self.name = name
         self.ssa = SSA()
+        self.sympyFromName = SymbolTable()
 
 class Parser:
     def __init__(self, **kw):
@@ -113,7 +129,24 @@ class Parser:
         return self.subsystemStack[-1]
     def currentInstructions(self):
         return self.instructionStack[-1]
-        
+    def currentSympyFromName(self):
+        return self.currentSubsystem().sympyFromName
+    def pushSympyTable(self):
+        self.currentSubsystem().sympyFromName = SymbolTable(self.currentSympyFromName())
+        return self.currentSympyFromName()
+    def popSympyTable(self):
+        retval = self.currentSympyFromName()
+        self.currentSubsystem().sympyFromName = self.currentSympyFromName().parent
+        return retval
+    def lookupVar(self, name):
+        #cheap hack for now
+        if not self.subsystemStack:
+            return (sympy.symbols(name), None)
+        elif name in self.currentSympyFromName()[name]:
+            return self.currentSympyFromName()[name]
+        else:
+            raise SyntaxError("Variable '"+name+"' used but not defined.")
+    
     def nodim(self):
         return ASTUnit(self.si.get("1"), False)
 
@@ -144,12 +177,6 @@ class Parser:
     
     def parse(self, s):
         return self.parser.parse(s)
-
-    def scopeBegin(self):
-        #start a new table
-        pass
-    def scopeEnd(self):
-        pass
     
     def astToTemp(self, ast):
         ast = p[1]
@@ -327,10 +354,6 @@ class Parser:
         self.subsystemStack.append(Subsystem(name))
         self.instructionStack.append(InstructionList())
         
-    def p_scopeBegin(self, p):
-        '''scopeBegin : empty'''
-        pass
-        
     def p_subSystemStatementsOpt(self, p):
         '''subSystemStatementsOpt : subSystemStatement subSystemStatementsOpt
                                   | empty 
@@ -450,25 +473,32 @@ class Parser:
 
     def p_ifStatement(self, p):
         '''ifStatement : initialIfCond thenBody elseOpt'''
-        pass
+        self.processIfCondition(p[0],p[1],p[2])
     def p_initialIfCond(self,p):
         '''initialIfCond : IF '(' realExprToTemp ')' '''
-        p[0] = p[2]
+        p[0] = p[3]
     def p_thenBody(self,p):
-        '''thenBody : '{' scopeBegin conditionalStatementsOpt '}' '''
-        pass
-    def p_elseOpt_empty(self,p):
-        '''elseOpt : empty '''
-        pass
-    def p_elseOpt_final(self, p):
-        '''elseOpt : ELSE '{' scopeBegin conditionalStatementsOpt '}' '''
-        pass
-    def p_elseOpt_continue(self, p):
-        '''elseOpt : elseIfCond thenBody elseOpt'''
-        pass
+        '''thenBody : '{' ifScopeBegin conditionalStatementsOpt '}' '''
+        p[0] = (self.instructionStack.pop(), self.popSympyTable())
+    def p_elseOpt(self,p):
+        '''elseOpt : ifScopeBegin 
+                   | ELSE '{' ifScopeBegin conditionalStatementsOpt '}'
+                   '''
+        p[0] = (self.instructionStack.pop(), self.popSympyTable())
+
     def p_elseIfCond(self, p):
         '''elseIfCond : pushNewInstructionList ELSEIF '(' realExprToTemp ')' '''
-        pass
+        p[0] = p[4]
+    def p_elseOpt_continue(self, p):
+        '''elseOpt : elseIfCond thenBody elseOpt'''
+        self.processIfCondition(p[0],p[1],p[2])
+        self.instructionStack.pop()
+
+    def p_ifScopeBegin(self, p):
+        '''ifScopeBegin : empty'''
+        self.instructionStack.append(InstructionList())
+        self.pushSympyTable()
+        
 
 
     def p_subSystemStatement_use(self, p):
@@ -760,8 +790,8 @@ class Parser:
 
     def p_primaryExpr_var(self, p):
         '''primaryExpr : var'''
-        v = sympy.symbols(p[1]) #FIXME, should be table lookup.
-        p[0] = AST(v, ASTUnit(None,explicit=False))
+        (sympyVar, unit) = self.lookupVar(p[1])
+        p[0] = AST(sympyVar, ASTUnit(unit,explicit=False))
     def p_primaryExpr_boolLiteral(self, p):
         '''primaryExpr : boolLiteral
         '''
