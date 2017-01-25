@@ -146,7 +146,43 @@ class Parser:
             return self.currentSympyFromName()[name]
         else:
             raise SyntaxError("Variable '"+name+"' used but not defined.")
-    
+    def processIfCondition(self, ifVar, thenBody, elseBody):
+
+        choiceInstructions = InstructionList()
+        thenSymbols = thenBody[1]
+        elseSymbols = elseBody[1]
+
+        for (key,(thenSympy, thenUnit)) in thenSymbols.local().items():
+            if key in elseSymbols: #no local here, to catch both then and else
+                (elseSympy, elseUnit) = elseSymbols[key]
+                choice = Choice(ifVar,
+                                thenSympy,
+                                elseSympy,
+                                ASTUnit.null() # FIXME?
+                                )
+                newVar = sympy.symbols(name)
+                self.currentSubsystem().ssa[newVar] = choice
+                choiceInstructions.addInstruction(choice)
+        
+        for (key, (elseSympy,elseUnit)) in elseSymbols.local().items():
+            if key in thenSymbols.local(): #local here so we don't violate ssa
+                (thenSympy, thenUnit) = thenSymbols[key]
+                choice = Choice(ifVar,
+                                thenSympy,
+                                elseSympy,
+                                ASTUnit.null() # FIXME?
+                                )
+                newVar = sympy.symbols(name)
+                self.currentSubsystem().ssa[newVar] = choice
+                choiceInstructions.addInstruction(choice)
+
+        thenInstructions = thenBody[0]
+        elseInstructions = elseBody[0]
+        iif = IfInstruction(ifVar,thenInstructions,elseInstructions,choiceInstructions)
+        self.currentInstructions().addInstruction(iif)
+        #fixme fill in the current symbol table with the choice stuff?
+
+        
     def nodim(self):
         return ASTUnit(self.si.get("1"), False)
 
