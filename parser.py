@@ -185,7 +185,7 @@ class Parser:
         self.currentInstructions().addInstruction(var)
         return (var,ast.unit)
     
-    t_ignore = " \t"
+    t_ignore = " \t\r"
                                     
     def t_newline(self, t):
         r'\n+'
