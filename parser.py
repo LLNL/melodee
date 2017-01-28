@@ -160,9 +160,7 @@ class Parser:
                                 elseSympy,
                                 ASTUnit.null() # FIXME?
                                 )
-                newVar = sympy.symbols(name)
-                self.currentSubsystem().ssa[newVar] = choice
-                choiceInstructions.addInstruction(choice)
+                self.astToSymbol(key,choice)
         
         for (key, (elseSympy,elseUnit)) in elseSymbols.local().items():
             if key in thenSymbols.local(): #local here so we don't violate ssa
@@ -172,9 +170,7 @@ class Parser:
                                 elseSympy,
                                 ASTUnit.null() # FIXME?
                                 )
-                newVar = sympy.symbols(name)
-                self.currentSubsystem().ssa[newVar] = choice
-                choiceInstructions.addInstruction(choice)
+                self.astToSymbol(key,choice)
 
         thenInstructions = thenBody[0]
         elseInstructions = elseBody[0]
@@ -213,13 +209,19 @@ class Parser:
     
     def parse(self, s):
         return self.parser.parse(s)
-    
-    def astToTemp(self, ast):
-        ast = p[1]
-        var = self.newTempVar()
+
+    def astToVar(self, var, ast):
         self.currentSubsystem().ssa[var] = ast
         self.currentInstructions().addInstruction(var)
-        return (var,ast.unit)
+        return (var, ast.unit)
+        
+    def astToTemp(self, ast):
+        return self.astToVar(self.newTempVar(),ast)
+    def astToSymbol(self, name, ast):
+        (var, astunit) = self.astToVar(sympy.symbols(name),ast)
+        self.currentSympyFromName()[name] = (var, astunit.unit)
+        return (var, astunit)
+        
     
     t_ignore = " \t\r"
                                     
@@ -509,7 +511,7 @@ class Parser:
 
     def p_ifStatement(self, p):
         '''ifStatement : initialIfCond thenBody elseOpt'''
-        self.processIfCondition(p[0],p[1],p[2])
+        self.processIfCondition(p[1],p[2],p[3])
     def p_initialIfCond(self,p):
         '''initialIfCond : IF '(' realExprToTemp ')' '''
         p[0] = p[3]
@@ -523,12 +525,12 @@ class Parser:
         p[0] = (self.instructionStack.pop(), self.popSympyTable())
 
     def p_elseIfCond(self, p):
-        '''elseIfCond : pushNewInstructionList ELSEIF '(' realExprToTemp ')' '''
+        '''elseIfCond : ELSEIF '(' realExprToTemp ')' '''
         p[0] = p[4]
     def p_elseOpt_continue(self, p):
-        '''elseOpt : elseIfCond thenBody elseOpt'''
-        self.processIfCondition(p[0],p[1],p[2])
-        self.instructionStack.pop()
+        '''elseOpt : ifScopeBegin elseIfCond thenBody elseOpt'''
+        self.processIfCondition(p[2],p[3],p[4])
+        p[0] = (self.instructionStack.pop(), self.popSympyTable())
 
     def p_ifScopeBegin(self, p):
         '''ifScopeBegin : empty'''
