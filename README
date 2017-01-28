@@ -21,3 +21,9 @@ Requirements:
 * Python - language everything is written in
 * PLY - for LR parsing
 * sympy - for symobolic expression manipulation
+
+
+-----------------
+
+This work was performed under the auspices of the United States Department of Energy by the Lawrence Livermore National Laboratory under Contract DE-AC52-07NA27344. Release Number LLNL-CODE-720003.
+
