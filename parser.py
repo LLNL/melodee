@@ -892,6 +892,15 @@ and && or || not ! 0 2.0 .3 40. 5e+6 if myID */* bljsadfj */ */
     print p.parse("uA/uF")
 
     p = Parser(start="realExpr")
+    p.p_subSystemBegin("testing")
+    p.currentScope().setSymbol("a", sympy.symbols("a"))
+    p.currentScope().setSymbol("b", sympy.symbols("b"))
+    p.currentScope().setSymbol("c", sympy.symbols("c"))
+    p.currentScope().setSymbol("d", sympy.symbols("d"))
+    p.currentScope().setUnit("a", p.si.get("unitless"))
+    p.currentScope().setUnit("b", p.si.get("unitless"))
+    p.currentScope().setUnit("c", p.si.get("ms"))
+    p.currentScope().setUnit("d", p.si.get("s"))
     print p.parse("a+b/c+d")
     print p.parse("a+(b/c)+d")
     print p.parse("a+b")
@@ -900,10 +909,15 @@ and && or || not ! 0 2.0 .3 40. 5e+6 if myID */* bljsadfj */ */
     print p.parse("(a)")
     print p.parse("((a))")
     print p.parse("((a+b))/((c+d))")
-    print p.parse("1 {ms}+ c {ms}")
-    print p.parse("convert(1 {ms}, s)+ c {s}")
+    print p.parse("1 {ms}+ c")
+    print p.parse("convert(1 {ms}, s)+ d {s}")
     print p.parse("a == b")
 
+
+
+
+
+    
     HH = '''
 integrate time {ms};
 subsystem hodgkin_huxley_1952 {
@@ -961,7 +975,7 @@ subsystem hodgkin_huxley_1952 {
       provides stable E_R {mV};
       Cm {uF/cm^2} = 1;
       E_R {mV} = -75;
-      V.init {mV} = -75;
+      V.init = -75;
       V.diff = -Iion/Cm;
    }
 }
