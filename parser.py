@@ -89,27 +89,63 @@ class ASTUnit:
     def null():
         return ASTUnit(None, False)
 
-class SymbolTable(dict):
+class Scope:
     def __init__(self, parent=None):
         self.parent = parent
-        dict.__init__(self)
-    def __getitem__(self, key):
-        if not dict.__contains__(self,key):
-            if self.parent != None:
-                return self.parent[key]
-        return dict.__getitem__(self,key)
-    def __contains__(self, key):
+        self.symbols = {}
+        self.units = {}
+        self.junctions = {}
+        self.instructions = []
+    def makeChild(self):
+        return Scope(self)
+    def getParent(self):
+        return self.parent
+    def getSymbol(self,name):
+        if name in self.symbols:
+            return self.symbols[name]
+        elif self.parent != None:
+            return self.parent.getSymbol(name)
+        else:
+            raise KeyError(name)
+    def hasSymbol(self, name):
         try:
-            self.__getitem__[key]
+            self.getSymbol(name)
         except KeyError,e:
             return False
         return True
-
+    def getUnit(self, name):
+        if name in self.units:
+            return self.units[name]
+        elif self.parent != None:
+            return self.parents.getUnit(name)
+        else:
+            raise KeyError(name)
+    def hasUnit(self,name):
+        try:
+            self.getUnit(name)
+        except KeyError,e:
+            return False
+        return True
+    def setSymbol(self, name, symbol):
+        self.symbols[name] = symbol
+    def setUnit(self, name, unit):
+        self.units[name] = unit
+    def hasJunction(self, name):
+        return name in self.junctions
+    
 class Subsystem:
     def __init__(self, name):
         self.name = name
         self.ssa = SSA()
-        self.sympyFromName = SymbolTable()
+        self.scope = Scope()
+        self.read = set()
+        self.diffvar = set()
+        self.accum = set()
+        self.write = set()
+        self.stable = set()
+        self.provided = set()
+
+        
 
 class Parser:
     def __init__(self, **kw):
@@ -123,29 +159,46 @@ class Parser:
         )
         self.si = units.Si()
         self.subsystemStack = []
-        self.instructionStack = []
-
+        self.scopeStack = [Scope()]
+        
     def currentSubsystem(self):
         return self.subsystemStack[-1]
+    def currentScope(self):
+        return self.scopeStack[-1]
     def currentInstructions(self):
-        return self.instructionStack[-1]
-    def currentSympyFromName(self):
-        return self.currentSubsystem().sympyFromName
-    def pushSympyTable(self):
-        self.currentSubsystem().sympyFromName = SymbolTable(self.currentSympyFromName())
-        return self.currentSympyFromName()
-    def popSympyTable(self):
-        retval = self.currentSympyFromName()
-        self.currentSubsystem().sympyFromName = self.currentSympyFromName().parent
+        return self.currentScope().instructions
+    def pushScope(self):
+        self.scopeStack[-1] = self.scopeStack[-1].makeChild()
+        return self.scopeStack[-1]
+    def popScope(self):
+        retval = self.scopeStack[-1]
+        self.scopeStack[-1] = self.scopeStack[-1].getParent()
         return retval
     def lookupVar(self, name):
-        #cheap hack for now
-        if not self.subsystemStack:
-            return (sympy.symbols(name), None)
-        elif name in self.currentSympyFromName()[name]:
-            return self.currentSympyFromName()[name]
+        #search for a local variable
+        if self.currentScope().hasSymbol(name):
+            symbol = self.currentScope().getSymbol(name)
+            rawUnit = None
+            if self.currentScope().hasUnit(name):
+                rawUnit = self.currentScope().getUnit(name)
+            else:
+                rawUnit = self.currentSubsystem().ssa[symbol].astUnit.rawUnit
+            return AST(symbol, ASTUnit(rawUnit, explicit=False))
         else:
-            raise SyntaxError("Variable '"+name+"' used but not defined.")
+            #check previous scopes for junctions
+            assert(len(self.scopeStack) >= 2)
+            assert(len(self.subsystemStack) >= 1)
+            for ii in range(len(self.scopeStack)-2,0,-1):
+                if self.scopeStack[ii].hasJunction(name):
+                    assert(self.scopeStack[ii].hasUnit(name))
+                    symbol = sympy.symbols(name)
+                    self.currentSubsystem().scope.setSymbol(name, symbol)
+                    self.currentSubsystem().scope.setUnit(name, self.scopeStack[ii].getUnit(name))
+                    #FIXME, add junctions here.
+                    return self.lookupVar(name)
+            else:
+                raise SyntaxError("Variable '"+name+"' used but not defined.")
+
     def processIfCondition(self, ifVar, thenBody, elseBody):
 
         choiceInstructions = InstructionList()
@@ -219,7 +272,7 @@ class Parser:
         return self.astToVar(self.newTempVar(),ast)
     def astToSymbol(self, name, ast):
         (var, astUnit) = self.astToVar(sympy.symbols(name),ast)
-        self.currentSympyFromName()[name] = (var, astUnit.rawUnit)
+        self.currentScope().setSymbol(name, var)
         return (var, astUnit)
         
     
@@ -354,13 +407,15 @@ class Parser:
     def p_integrateStatement(self, p):
         '''integrateStatement : INTEGRATE var unitDef ';'
         '''
-        pass
+        self.currentScope().junctions[p[2]] = None
+        self.currentScope().setUnit(p[2],p[3])
     
     def p_sharedStatement_unit(self, p):
         '''sharedStatement : SHARED STABLE var unitDef ';'
                            | SHARED EPHEMERAL var unitDef ';'
         '''
-        pass
+        self.currentScope().junctions[p[3]] = None
+        self.currentScope().setUnit(p[3],p[4])
     def p_sharedStatement_flag(self, p):
         '''sharedStatement : SHARED flagDeclBool ';'
                            | SHARED flagDeclEnum ';'
@@ -382,7 +437,6 @@ class Parser:
 
     def p_subSystemDefinition(self, p):
         '''subSystemDefinition : subSystemBegin subSystemStatementsOpt '}' '''
-        self.currentSubsystem().instructions = self.instructionStack.pop()
         p[0] = self.subsystemStack.pop()
     def p_subSystemBegin(self, p):
         '''subSystemBegin : SUBSYSTEM NAME '{' '''
@@ -390,7 +444,7 @@ class Parser:
         if self.subsystemStack:
             thisName = self.currentSubsystem().name + "." + thisName
         self.subsystemStack.append(Subsystem(thisName))
-        self.instructionStack.append(InstructionList())
+        self.scopeStack.append(self.currentSubsystem().scope)
         
     def p_subSystemStatementsOpt(self, p):
         '''subSystemStatementsOpt : subSystemStatement subSystemStatementsOpt
@@ -408,6 +462,17 @@ class Parser:
 
     def p_subSystemStatement_provide(self, p):
         '''subSystemStatement : providesStatement'''
+        pass
+
+    def p_subSystemStatement_param(self, p):
+        '''subSystemStatement : paramStatement'''
+        pass
+
+    def p_paramStatement_decl(self, p):
+        '''paramStatement : PARAM var unitDef ';' '''
+        pass
+    def p_paramStatement_defn(self, p):
+        '''paramStatement : PARAM assignDef '''
         pass
 
     def p_providesStatement_flagDecl(self, p):
@@ -466,11 +531,11 @@ class Parser:
 
     def p_varDef_assign(self, p):
         '''varDef : assignDef'''
-        pass
+        p[0] = p[1]
 
     def p_varDef_accum(self, p):
         '''varDef : accumDef'''
-        pass
+        p[0] = p[1]
 
     def p_varDef_modAssign(self, p):
         '''varDef : var TIMESEQ realExpr ';'
@@ -481,20 +546,18 @@ class Parser:
 
     def p_assignDef_withoutUnit(self, p):
         '''assignDef : var '=' realExpr ';' '''
-        p[0] = self.assign(p[1], p[3])
+        p[0] = (p[1], p[3], None)
     def p_assignDef(self, p):
         '''assignDef : var unitDef '=' realExpr ';' '''
-        p[0] = self.assign(p[1], p[4], p[2])
+        p[0] = (p[1], p[4], p[2])
     def p_accumDef(self, p):
         '''accumDef : var PLUSEQ realExpr ';'
                     | var MINUSEQ realExpr ';'
         '''
-        if not self.varDefined(p[1]):
-            raise SyntaxError("Assigning to an undefined variable '"+p[1]+"'!")
         rhs = p[3]
         if p[2] == 'MINUSEQ':
             rhs = AST(sympy.Mul(sympy.Integer(-1),rhs.sympy, rhs.astUnit))
-        p[0] = self.assign(p[1], AST(sympy.Add(rhs),self.getVar(lhs),self.checkExactUnits()))
+        p[0] = (p[1], p[4])
 
     def p_conditionalStatement_diffs(self, p):
         '''conditionalStatement : diffDef'''
@@ -503,8 +566,9 @@ class Parser:
         '''diffDef : var '.' INIT '=' realExpr ';'
                    | var '.' DIFF '=' realExpr ';'
         '''
-        pass
-
+        p[0] = (p[1]+p[2]+p[3], p[5], self.lookupVar(p[1]).astUnit.rawUnit)
+        #FIXME, need to get the time unit here.
+        
     def p_subSystemStatement_if(self, p):
         '''conditionalStatement : ifStatement'''
         pass
@@ -517,12 +581,12 @@ class Parser:
         p[0] = p[3]
     def p_thenBody(self,p):
         '''thenBody : '{' ifScopeBegin conditionalStatementsOpt '}' '''
-        p[0] = (self.instructionStack.pop(), self.popSympyTable())
+        p[0] = self.popScope()
     def p_elseOpt(self,p):
         '''elseOpt : ifScopeBegin 
                    | ELSE '{' ifScopeBegin conditionalStatementsOpt '}'
                    '''
-        p[0] = (self.instructionStack.pop(), self.popSympyTable())
+        p[0] = self.popScope()
 
     def p_elseIfCond(self, p):
         '''elseIfCond : ELSEIF '(' realExprToTemp ')' '''
@@ -530,14 +594,11 @@ class Parser:
     def p_elseOpt_continue(self, p):
         '''elseOpt : ifScopeBegin elseIfCond thenBody elseOpt'''
         self.processIfCondition(p[2],p[3],p[4])
-        p[0] = (self.instructionStack.pop(), self.popSympyTable())
+        p[0] = self.popScope()
 
     def p_ifScopeBegin(self, p):
         '''ifScopeBegin : empty'''
-        self.instructionStack.append(InstructionList())
-        self.pushSympyTable()
-        
-
+        self.pushScope()
 
     def p_subSystemStatement_use(self, p):
         '''subSystemStatement : useStatement'''
@@ -813,7 +874,7 @@ class Parser:
         p[0] = p[1]
     def p_funcArgList_term(self, p):
         '''funcArgList : realExpr'''
-        self.checkExactUnits(p[1],self.nodim())
+        self.checkExactUnits(p[1].astUnit,self.nodim())
         p[0] = [p[1]]
     def p_funcArgList_shift(self, p):
         '''funcArgList : realExpr ',' funcArgList'''
@@ -828,8 +889,7 @@ class Parser:
 
     def p_primaryExpr_var(self, p):
         '''primaryExpr : var'''
-        (sympyVar, unit) = self.lookupVar(p[1])
-        p[0] = AST(sympyVar, ASTUnit(unit,explicit=False))
+        p[0] = self.lookupVar(p[1])
     def p_primaryExpr_boolLiteral(self, p):
         '''primaryExpr : boolLiteral
         '''
