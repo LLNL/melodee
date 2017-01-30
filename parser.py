@@ -865,7 +865,7 @@ class Parser:
 
     def p_error(self,p):
         if p:
-            print "SyntaxError at token", p.type
+            print "SyntaxError on line number "+str(self.lexer.lineno)+" at token", p.type, p.value
             self.parser.errok()
 
 
