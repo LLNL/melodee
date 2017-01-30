@@ -50,41 +50,41 @@ class Choice:
         self.ifVar = ifVar
         self.thenVar = thenVar
         self.elseVar = elseVar
-        self.unit = unit
+        self.astUnit = unit
 
 class AST:
     def __init__(self, sympyExpr, unit=None):
         self.sympy = sympyExpr
-        self.unit = unit
+        self.astUnit = unit
     def __repr__(self):
-        return 'AST(sympify(' + repr(self.sympy) +'), '+ repr(self.unit) +')'
+        return 'AST(sympify(' + repr(self.sympy) +'), '+ repr(self.astUnit) +')'
 
 def textToAST(text, unit):
     return AST(sympy.sympify(text), unit)
 
 class ASTUnit:
     def __init__(self, unit, explicit):
-        self.unit = unit
+        self.rawUnit = unit
         self.explicit = explicit
     def isNull(self):
-        return self.unit is None
+        return self.rawUnit is None
     def __mul__(self, other):
         if other.isNull() or self.isNull():
             return ASTUnit.null()
         else:
-            return ASTUnit(self.unit*other.unit, self.explicit or other.explicit)
+            return ASTUnit(self.rawUnit*other.rawUnit, self.explicit or other.explicit)
     def __div__(self, other):
         if other.isNull() or self.isNull():
             return ASTUnit.null()
         else:
-            return ASTUnit(self.unit/other.unit, self.explicit or other.explicit)
+            return ASTUnit(self.rawUnit/other.rawUnit, self.explicit or other.explicit)
     def __pow__(self, number):
         if self.isNull():
             return ASTUnit.null()
         else:
-            return ASTUnit(self.unit ** number, self.explicit)
+            return ASTUnit(self.rawUnit ** number, self.explicit)
     def __repr__(self):
-        return 'ASTUnit('+repr(self.unit)+','+repr(self.explicit)+')'
+        return 'ASTUnit('+repr(self.rawUnit)+','+repr(self.explicit)+')'
     @staticmethod
     def null():
         return ASTUnit(None, False)
@@ -191,20 +191,20 @@ class Parser:
         else:
             # now we have something with units!  Check if they match.
             resultIsExplicit = lunit.explicit or runit.explicit
-            if lunit.unit == runit.unit:
-                return ASTUnit(lunit.unit, resultIsExplicit)
+            if lunit.rawUnit == runit.rawUnit:
+                return ASTUnit(lunit.rawUnit, resultIsExplicit)
             else:
                 if resultIsExplicit:
                     raise SyntaxError("Units don't match, maybe you need a conversion?")
                 else:
                     return ASTUnit.null()
     def convertUnitTo(self, expr, newUnit):
-        if expr.unit.isNull():
+        if expr.astUnit.isNull():
             raise SyntaxError("Can't convert a null unit!")
-        elif not expr.unit.unit.isCompatibleWith(newUnit):
+        elif not expr.astUnit.rawUnit.isCompatibleWith(newUnit):
             raise SyntaxError("Incompatible unit conversion requested.")
         else:
-            factor = expr.unit.unit.convertTo(newUnit)
+            factor = expr.astUnit.rawUnit.convertTo(newUnit)
             return AST(sympy.Mul(factor,expr.sympy), ASTUnit(newUnit, explicit=False))
     
     def parse(self, s):
@@ -213,14 +213,14 @@ class Parser:
     def astToVar(self, var, ast):
         self.currentSubsystem().ssa[var] = ast
         self.currentInstructions().addInstruction(var)
-        return (var, ast.unit)
+        return (var, ast.astUnit)
         
     def astToTemp(self, ast):
         return self.astToVar(self.newTempVar(),ast)
     def astToSymbol(self, name, ast):
-        (var, astunit) = self.astToVar(sympy.symbols(name),ast)
-        self.currentSympyFromName()[name] = (var, astunit.unit)
-        return (var, astunit)
+        (var, astUnit) = self.astToVar(sympy.symbols(name),ast)
+        self.currentSympyFromName()[name] = (var, astUnit.rawUnit)
+        return (var, astUnit)
         
     
     t_ignore = " \t\r"
@@ -493,7 +493,7 @@ class Parser:
             raise SyntaxError("Assigning to an undefined variable '"+p[1]+"'!")
         rhs = p[3]
         if p[2] == 'MINUSEQ':
-            rhs = AST(sympy.Mul(sympy.Integer(-1),rhs.sympy, rhs.unit))
+            rhs = AST(sympy.Mul(sympy.Integer(-1),rhs.sympy, rhs.astUnit))
         p[0] = self.assign(p[1], AST(sympy.Add(rhs),self.getVar(lhs),self.checkExactUnits()))
 
     def p_conditionalStatement_diffs(self, p):
@@ -639,8 +639,8 @@ class Parser:
         p[0] = p[1]
 
     def powerProcess(self, x, y):
-        if (not x.unit.isNull()) and y.sympy.is_constant():
-            newUnit = x.unit ** float(y.sympy)
+        if (not x.astUnit.isNull()) and y.sympy.is_constant():
+            newUnit = x.astUnit ** float(y.sympy)
         else:
             newUnit = ASTUnit.null()
         return AST(sympy.Pow(x.sympy, y.sympy), newUnit)
@@ -715,7 +715,7 @@ class Parser:
             boolOp = sympy.Ne
         else:
             boolOp = sympy.Eq
-        self.checkExactUnits(p[1].unit,p[3].unit)
+        self.checkExactUnits(p[1].astUnit,p[3].astUnit)
         p[0] = AST(boolOp(p[1].sympy,p[3].sympy),self.nodim())
 
     def p_relationExpr_pass(self, p):
@@ -735,7 +735,7 @@ class Parser:
             boolOp = sympy.Le
         else:
             boolOp = sympy.Ge
-        self.checkExactUnits(p[1].unit,p[3].unit)
+        self.checkExactUnits(p[1].astUnit,p[3].astUnit)
         p[0] = AST(boolOp(p[1].sympy,p[3].sympy),self.nodim())
 
     def p_additiveExpr_pass(self, p):
@@ -748,8 +748,8 @@ class Parser:
         lhs = p[1]
         rhs = p[3]
         if p[2] == '-':
-            rhs = AST(sympy.Mul(sympy.Integer(-1),rhs.sympy), rhs.unit)
-        p[0] = AST(sympy.Add(lhs.sympy,rhs.sympy), self.checkExactUnits(lhs.unit,rhs.unit))
+            rhs = AST(sympy.Mul(sympy.Integer(-1),rhs.sympy), rhs.astUnit)
+        p[0] = AST(sympy.Add(lhs.sympy,rhs.sympy), self.checkExactUnits(lhs.astUnit,rhs.astUnit))
 
     def p_multiplicitiveExpr_pass(self, p):
         '''multiplicitiveExpr : unaryExpr'''
@@ -761,15 +761,15 @@ class Parser:
         lhs = p[1]
         rhs = p[3]
         if p[2] == '/':
-            rhs = AST(sympy.Pow(rhs.sympy,sympy.Integer(-1)), rhs.unit ** -1)
-        p[0] = AST(sympy.Mul(lhs.sympy,rhs.sympy), lhs.unit*rhs.unit)
+            rhs = AST(sympy.Pow(rhs.sympy,sympy.Integer(-1)), rhs.astUnit ** -1)
+        p[0] = AST(sympy.Mul(lhs.sympy,rhs.sympy), lhs.astUnit*rhs.astUnit)
 
     def p_unaryExpr_pass(self, p):
         '''unaryExpr : unitLabelExpr'''
         p[0] = p[1]
     def p_unaryExpr_uminus(self, p):
         '''unaryExpr : '-' unaryExpr'''
-        p[0] = AST(sympy.Mul(sympy.Integer(-1),p[2].sympy), p[2].unit)
+        p[0] = AST(sympy.Mul(sympy.Integer(-1),p[2].sympy), p[2].astUnit)
     def p_unaryExpr_not(self, p):
         '''unaryExpr : NOT unaryExpr
                      | '!' unaryExpr
@@ -782,8 +782,8 @@ class Parser:
     def p_unitExpr_impl(self, p):
         '''unitLabelExpr : exponentExpr unitDef '''
         newUnit = ASTUnit(p[2],explicit=True)
-        if not p[1].unit.isNull():
-            self.checkExactUnits(p[1].unit, newUnit)
+        if not p[1].astUnit.isNull():
+            self.checkExactUnits(p[1].astUnit, newUnit)
         p[0] = AST(p[1].sympy, newUnit)
 
     def p_exponentExpr_pass(self, p):
@@ -817,7 +817,7 @@ class Parser:
         p[0] = [p[1]]
     def p_funcArgList_shift(self, p):
         '''funcArgList : realExpr ',' funcArgList'''
-        self.checkExactUnits(p[1].unit, self.nodim())
+        self.checkExactUnits(p[1].astUnit, self.nodim())
         p[0] = [p[1]] + p[3]
     def p_parenExpr_pass(self, p):
         '''parenExpr : primaryExpr'''
@@ -912,7 +912,7 @@ subsystem hodgkin_huxley_1952 {
    shared stable E_R {mV};
    subsystem leakage_current {
       E_L {mV} = (E_R+10.613{mV});
-      g_L {mS/cm^2} = 0.3;
+      param g_L {mS/cm^2} = 0.3;
       i_L {uA/cm^2} = g_L*(V-E_L);
       provides accum Iion += i_L;
    }
