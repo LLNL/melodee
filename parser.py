@@ -97,7 +97,7 @@ class SymbolTable(dict):
         if not dict.__contains__(self,key):
             if self.parent != None:
                 return self.parent[key]
-        return self[key]
+        return dict.__getitem__(self,key)
     def __contains__(self, key):
         try:
             self.__getitem__[key]
@@ -389,7 +389,7 @@ class Parser:
         thisName = p[2]
         if self.subsystemStack:
             thisName = self.currentSubsystem().name + "." + thisName
-        self.subsystemStack.append(Subsystem(name))
+        self.subsystemStack.append(Subsystem(thisName))
         self.instructionStack.append(InstructionList())
         
     def p_subSystemStatementsOpt(self, p):
@@ -904,4 +904,68 @@ and && or || not ! 0 2.0 .3 40. 5e+6 if myID */* bljsadfj */ */
     print p.parse("convert(1 {ms}, s)+ c {s}")
     print p.parse("a == b")
 
+    HH = '''
+integrate time {ms};
+subsystem hodgkin_huxley_1952 {
+   shared ephemeral V {mV};
+   shared ephemeral Iion {uA/cm^2};
+   shared stable E_R {mV};
+   subsystem leakage_current {
+      E_L {mV} = (E_R+10.613{mV});
+      g_L {mS/cm^2} = 0.3;
+      i_L {uA/cm^2} = g_L*(V-E_L);
+      provides accum Iion += i_L;
+   }
+   subsystem potassium_channel {
+      shared ephemeral n {1};
+      subsystem potassium_channel_n_gate {
+         provides diffvar n {1};
+         alpha_n {1/ms} = -0.01{1/mV/ms}*(V+65{mV})/(exp(-(V+65{mV})/10{mV})-1{1});
+         beta_n {1/ms} = 0.125{1/ms}*exp((V+75{mV})/80{mV});
+         n.init = 0.325;
+         n.diff = (alpha_n*(1-n)-beta_n*n);
+      }
+      E_K {mV} = (E_R-12{mV});
+      g_K {mS/cm^2} = 36;
+      i_K {uA/cm^2} = g_K*n^4*(V-E_K);
+      provides accum Iion += i_K;
+   }
+   subsystem sodium_channel {
+      shared ephemeral h {1};
+      shared ephemeral m {1};
+      subsystem sodium_channel_h_gate {
+         provides diffvar h {1};
+         alpha_h {1/ms} = 0.07{1/ms}*exp(-(V+75{mV})/20{mV});
+         beta_h {1/ms} = 1{1/ms}/(exp(-(V+45{mV})/10{mV})+1);
+         h.init = 0.6;
+         h.diff = (alpha_h*(1-h)-beta_h*h);
+      }
+      subsystem sodium_channel_m_gate {
+         provides diffvar m {1};
+         alpha_m {1/ms} = -0.1{1/mV/ms}*(V+50{mV})/(exp(-(V+50{mV})/10{mV})-1);
+         beta_m {1/ms} = 4{1/ms}*exp(-(V+75{mV})/18{mV});
+         m.init = 0.05;
+         m.diff = (alpha_m*(1-m)-beta_m*m);
+      }
+      E_Na {mV} = (E_R+115{mV});
+      g_Na {mS/cm^2} = 120;
+      i_Na {uA/cm^2} = g_Na*m^3*h*(V-E_Na);
+      provides accum Iion += i_Na;
+   }
+   subsystem stimulus {
+      i_Stim {uA/cm^2} = ((time >= 10{ms} && time <= 10.5{ms}) ? 20{uA/cm^2} : 0{uA/cm^2});
+      provides accum Iion += i_Stim;
+   }
+   subsystem membrane {
+      provides diffvar V {mV};
+      provides stable E_R {mV};
+      Cm {uF/cm^2} = 1;
+      E_R {mV} = -75;
+      V.init {mV} = -75;
+      V.diff = -Iion/Cm;
+   }
+}
+'''
     p = Parser(start="topLevelStatementsOpt")
+    p.parse(HH)
+    
