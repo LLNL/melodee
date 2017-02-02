@@ -239,6 +239,15 @@ class Parser:
     def nodim(self):
         return ASTUnit(self.si.get("1"), False)
 
+    def checkExplicitCast(self, castRaw, ast):
+        retval=AST(ast.sympy, ASTUnit(castRaw, explicit=True))
+        if ast.astUnit.isNull():
+            return retval
+        elif ast.astUnit.rawUnit == castRaw:
+            return retval
+        else:
+            raise SyntaxError("Can't cast "+str(ast.astUnit)+" to unit of "+str(castRaw)+")")
+
     def checkExactUnits(self, lunit, runit):
         if lunit.isNull() or runit.isNull():
             if lunit.explicit or runit.explicit:
@@ -858,10 +867,7 @@ class Parser:
         p[0] = p[1]
     def p_unitExpr_impl(self, p):
         '''unitLabelExpr : exponentExpr unitDef '''
-        newUnit = ASTUnit(p[2],explicit=True)
-        if not p[1].astUnit.isNull():
-            self.checkExactUnits(p[1].astUnit, newUnit)
-        p[0] = AST(p[1].sympy, newUnit)
+        p[0] = self.checkExplicitCast(p[2], p[1])
 
     def p_exponentExpr_pass(self, p):
         '''exponentExpr : functionExpr'''
@@ -989,11 +995,6 @@ and && or || not ! 0 2.0 .3 40. 5e+6 if myID */* bljsadfj */ */
     print p.parse("convert(1 {ms}, s)+ d {s}")
     print p.parse("a == b")
 
-
-
-
-
-    
     HH = '''
 integrate time {ms};
 subsystem hodgkin_huxley_1952 {
@@ -1058,4 +1059,3 @@ subsystem hodgkin_huxley_1952 {
 '''
     p = Parser(start="topLevelStatementsOpt")
     p.parse(HH)
-    
