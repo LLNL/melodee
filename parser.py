@@ -143,9 +143,9 @@ class Subsystem:
         self.read = set()
         self.diffvar = set()
         self.accum = set()
-        self.write = set()
         self.stable = set()
         self.provided = set()
+        self.time = set()
 
         
 
@@ -162,6 +162,8 @@ class Parser:
         self.si = units.Si()
         self.subsystemStack = []
         self.scopeStack = [Scope()]
+        self.timeVar = None
+        self.timeUnit = None
         
     def currentSubsystem(self):
         return self.subsystemStack[-1]
@@ -409,9 +411,9 @@ class Parser:
     def p_integrateStatement(self, p):
         '''integrateStatement : INTEGRATE var unitDef ';'
         '''
-        self.currentScope().junctions[p[2]] = None
-        self.currentScope().setUnit(p[2],p[3])
-    
+        self.timeVar = p[2]
+        self.timeUnit = p[3]
+        
     def p_sharedStatement_unit(self, p):
         '''sharedStatement : SHARED STABLE var unitDef ';'
                            | SHARED EPHEMERAL var unitDef ';'
@@ -445,6 +447,12 @@ class Parser:
         thisName = p[2]
         if self.subsystemStack:
             thisName = self.currentSubsystem().name + "." + thisName
+        thisSubsystem = Subsystem(thisName)
+        if self.timeVar != None:
+            thisSubsystem.scope.setSymbol(self.timeVar,sympy.symbol(self.timeVar))
+            thisSubsystem.scope.setUnit(self.timeVar, self.timeUnit)
+            thisSubsystem.time.add(self.timeVar)
+            
         self.subsystemStack.append(Subsystem(thisName))
         self.scopeStack.append(self.currentSubsystem().scope)
         
@@ -498,6 +506,10 @@ class Parser:
                              | PROVIDES EPHEMERAL var ';'
                              | PROVIDES var ';'
         '''
+        if p[2] == "DIFFVAR" and self.timeUnit == None:
+            raise SyntaxError("Must include an 'integrate' statement before declaring subsystems.")
+        
+            
         pass
     def p_providesStatement_DeclSubUnit(self, p):
         '''providesStatement : PROVIDES ACCUM var unitDef ';'
@@ -507,7 +519,9 @@ class Parser:
                              | PROVIDES EPHEMERAL var unitDef ';'
                              | PROVIDES var unitDef ';'
         '''
-        pass
+        if p[2] == "DIFFVAR" and self.timeUnit == None:
+            raise SyntaxError("Must include an 'integrate' statement before declaring subsystems.")
+
 
     def p_providesStatement_Defn(self, p):
         '''providesStatement : PROVIDES ACCUM accumDef
