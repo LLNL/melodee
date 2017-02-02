@@ -132,6 +132,8 @@ class Scope:
         self.units[name] = unit
     def hasJunction(self, name):
         return name in self.junctions
+    def addInstruction(self, inst):
+        self.instructions.addInstruction(inst)
     
 class Subsystem:
     def __init__(self, name):
