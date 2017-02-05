@@ -143,7 +143,6 @@ class Subsystem:
         self.read = set()
         self.diffvar = set()
         self.accum = set()
-        self.stable = set()
         self.provided = set()
         self.time = set()
 
@@ -305,8 +304,6 @@ class Parser:
         "elseif" : "ELSEIF",
         "true" : "TRUE",
         "false" : "FALSE",
-        "stable" : "STABLE",
-        "ephemeral" : "EPHEMERAL",
         "flag" : "FLAG",
         "param" : "PARAM",
         "accum" : "ACCUM",
@@ -424,11 +421,10 @@ class Parser:
         self.timeUnit = p[3]
         
     def p_sharedStatement_unit(self, p):
-        '''sharedStatement : SHARED STABLE var unitDef ';'
-                           | SHARED EPHEMERAL var unitDef ';'
+        '''sharedStatement : SHARED var unitDef ';'
         '''
-        self.currentScope().junctions[p[3]] = None
-        self.currentScope().setUnit(p[3],p[4])
+        self.currentScope().junctions[p[2]] = None
+        self.currentScope().setUnit(p[2],p[3])
     def p_sharedStatement_flag(self, p):
         '''sharedStatement : SHARED flagDeclBool ';'
                            | SHARED flagDeclEnum ';'
@@ -511,8 +507,6 @@ class Parser:
         '''providesStatement : PROVIDES ACCUM var ';'
                              | PROVIDES DIFFVAR var ';'
                              | PROVIDES PARAM var ';'
-                             | PROVIDES STABLE var ';'
-                             | PROVIDES EPHEMERAL var ';'
                              | PROVIDES var ';'
         '''
         if p[2] == "DIFFVAR" and self.timeUnit == None:
@@ -524,8 +518,6 @@ class Parser:
         '''providesStatement : PROVIDES ACCUM var unitDef ';'
                              | PROVIDES DIFFVAR var unitDef ';'
                              | PROVIDES PARAM var unitDef ';'
-                             | PROVIDES STABLE var unitDef ';'
-                             | PROVIDES EPHEMERAL var unitDef ';'
                              | PROVIDES var unitDef ';'
         '''
         if p[2] == "DIFFVAR" and self.timeUnit == None:
@@ -998,9 +990,9 @@ and && or || not ! 0 2.0 .3 40. 5e+6 if myID */* bljsadfj */ */
     HH = '''
 integrate time {ms};
 subsystem hodgkin_huxley_1952 {
-   shared ephemeral V {mV};
-   shared ephemeral Iion {uA/cm^2};
-   shared stable E_R {mV};
+   shared V {mV};
+   shared Iion {uA/cm^2};
+   shared E_R {mV};
    subsystem leakage_current {
       E_L {mV} = (E_R+10.613{mV});
       param g_L {mS/cm^2} = 0.3;
@@ -1008,7 +1000,7 @@ subsystem hodgkin_huxley_1952 {
       provides accum Iion += i_L;
    }
    subsystem potassium_channel {
-      shared ephemeral n {1};
+      shared n {1};
       subsystem potassium_channel_n_gate {
          provides diffvar n {1};
          alpha_n {1/ms} = -0.01{1/mV/ms}*(V+65{mV})/(exp(-(V+65{mV})/10{mV})-1{1});
@@ -1022,8 +1014,8 @@ subsystem hodgkin_huxley_1952 {
       provides accum Iion += i_K;
    }
    subsystem sodium_channel {
-      shared ephemeral h {1};
-      shared ephemeral m {1};
+      shared h {1};
+      shared m {1};
       subsystem sodium_channel_h_gate {
          provides diffvar h {1};
          alpha_h {1/ms} = 0.07{1/ms}*exp(-(V+75{mV})/20{mV});
@@ -1049,7 +1041,7 @@ subsystem hodgkin_huxley_1952 {
    }
    subsystem membrane {
       provides diffvar V {mV};
-      provides stable E_R {mV};
+      provides E_R {mV};
       Cm {uF/cm^2} = 1;
       E_R {mV} = -75;
       V.init = -75;
