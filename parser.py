@@ -463,48 +463,52 @@ class Parser:
         '''subSystemStatement : subSystemDefinition'''
         pass
 
-    def p_subSystemStatement_provide(self, p):
-        '''subSystemStatement : providesStatement'''
+    def p_subSystemStatement_accum(self, p):
+        '''subSystemStatement : PROVIDES ACCUM var unitOpt accumDefOpt ';' '''
         pass
+    def p_accumDefOpt_empty(self, p):
+        '''accumDefOpt : empty'''
+        p[0] = None
+    def p_accumDefOpt_def(self, p):
+        '''accumDefOpt : PLUSEQ  realExpr
+                       | MINUSEQ realExpr
+        '''
+        rhs = p[2]
+        if p[1] == 'MINUSEQ':
+            rhs = AST(sympy.Mul(sympy.Integer(-1),rhs.sympy, rhs.astUnit))
+        p[0] = rhs
 
     def p_subSystemStatement_param(self, p):
-        '''subSystemStatement : paramStatement'''
-        pass
-
-    def p_paramStatement_decl(self, p):
-        '''paramStatement : PARAM var unitDef ';' '''
-        pass
-    def p_paramStatement_defn(self, p):
-        '''paramStatement : PARAM assignDef '''
-        pass
-
-    def p_providesStatement_DeclSubNoUnit(self, p):
-        '''providesStatement : PROVIDES ACCUM var ';'
-                             | PROVIDES DIFFVAR var ';'
-                             | PROVIDES PARAM var ';'
-                             | PROVIDES var ';'
+        '''subSystemStatement : PROVIDES PARAM var unitOpt assignOpt ';' 
+                              |          PARAM var unitDef assignOpt ';' 
         '''
-        if p[2] == "DIFFVAR" and self.timeUnit == None:
+        pass
+    def p_assignOpt_empty(self, p):
+        '''assignOpt : empty'''
+        p[0] = None
+    def p_assignOpt_def(self, p):
+        '''assignOpt : '=' realExpr'''
+        p[0] = p[1]
+
+    def p_subSystemStatement_diffvar(self, p):
+        '''subSystemStatement : PROVIDES DIFFVAR var unitOpt ';'
+                              |          DIFFVAR var unitDef ';' 
+        '''
+        if self.timeUnit is None:
             raise SyntaxError("Must include an 'integrate' statement before declaring subsystems.")
-        
-            
         pass
-    def p_providesStatement_DeclSubUnit(self, p):
-        '''providesStatement : PROVIDES ACCUM var unitDef ';'
-                             | PROVIDES DIFFVAR var unitDef ';'
-                             | PROVIDES PARAM var unitDef ';'
-                             | PROVIDES var unitDef ';'
-        '''
-        if p[2] == "DIFFVAR" and self.timeUnit == None:
-            raise SyntaxError("Must include an 'integrate' statement before declaring subsystems.")
-
-
-    def p_providesStatement_Defn(self, p):
-        '''providesStatement : PROVIDES ACCUM accumDef
-                             | PROVIDES PARAM assignDef
-                             | PROVIDES assignDef
-        '''
+    def p_subSystemStatement_output(self, p):
+        '''subSystemStatement : PROVIDES var unitOpt assignOpt ';' '''
         pass
+
+    
+    def p_unitOpt_empty(self, p):
+        '''unitOpt : empty '''
+        p[0] = None
+    def p_unitOpt_unit(self, p):
+        '''unitOpt : unitDef '''
+        p[0] = p[1]
+
 
     def p_subSystemStatement_definition(self, p):
         '''subSystemStatement : conditionalStatement '''
@@ -517,50 +521,18 @@ class Parser:
         '''conditionalStatementsOpt : conditionalStatementsOpt conditionalStatement'''
         pass
 
-    def p_conditionalStatement_vars(self, p):
-        '''conditionalStatement : varDef'''
-        pass
-    
-    def p_varDef_assign(self, p):
-        '''varDef : assignDef'''
-        p[0] = p[1]
-
-    def p_varDef_accum(self, p):
-        '''varDef : accumDef'''
-        p[0] = p[1]
-
-    def p_varDef_modAssign(self, p):
-        '''varDef : var TIMESEQ realExpr ';'
-                  | var DIVIDEEQ realExpr ';'
-                  | var EXPONEQ realExpr ';'
+    def p_conditionalStatement_varDefn(self, p):
+        '''conditionalStatement : varDiffOpt unitOpt '=' realExpr ';'
+                                | varDiffOpt unitOpt PLUSEQ realExpr ';'
+                                | varDiffOpt unitOpt MINUSEQ realExpr ';'
+                                | varDiffOpt unitOpt TIMESEQ realExpr ';'
+                                | varDiffOpt unitOpt DIVIDEEQ realExpr ';'
+                                | varDiffOpt unitOpt EXPONEQ realExpr ';'
         '''
         pass
-
-    def p_assignDef_withoutUnit(self, p):
-        '''assignDef : var '=' realExpr ';' '''
-        p[0] = (p[1], p[3], None)
-    def p_assignDef(self, p):
-        '''assignDef : var unitDef '=' realExpr ';' '''
-        p[0] = (p[1], p[4], p[2])
-    def p_accumDef(self, p):
-        '''accumDef : var PLUSEQ realExpr ';'
-                    | var MINUSEQ realExpr ';'
-        '''
-        rhs = p[3]
-        if p[2] == 'MINUSEQ':
-            rhs = AST(sympy.Mul(sympy.Integer(-1),rhs.sympy, rhs.astUnit))
-        p[0] = (p[1], p[4])
-
-    def p_conditionalStatement_diffs(self, p):
-        '''conditionalStatement : diffDef'''
-
-    def p_diffDef(self, p):
-        '''diffDef : var '.' INIT '=' realExpr ';'
-                   | var '.' DIFF '=' realExpr ';'
-        '''
-        p[0] = (p[1]+p[2]+p[3], p[5], self.lookupVar(p[1]).astUnit.rawUnit)
         #FIXME, need to get the time unit here.
-        
+
+    ########################################################################
     def p_subSystemStatement_if(self, p):
         '''conditionalStatement : ifStatement'''
         pass
@@ -591,6 +563,9 @@ class Parser:
     def p_ifScopeBegin(self, p):
         '''ifScopeBegin : empty'''
         self.pushScope()
+
+    ##################################################################
+
 
     def p_subSystemStatement_use(self, p):
         '''subSystemStatement : useStatement'''
@@ -686,7 +661,15 @@ class Parser:
     def p_var(self, p):
         '''var : NAME'''
         p[0] = p[1]
-
+    def p_varDiffOpt_base(self, p):
+        '''varDiffOpt : var'''
+        p[0] = p[1]
+    def p_varDiffOpt_diff(self, p):
+        '''varDiffOpt : var '.' DIFF
+                      | var '.' INIT
+        '''
+        p[0] = p[1] +'.'+ p[3]
+        
     def powerProcess(self, x, y):
         if (not x.astUnit.isNull()) and y.sympy.is_constant():
             newUnit = x.astUnit ** float(y.sympy)
@@ -873,7 +856,7 @@ class Parser:
         p[0] = p[2]
 
     def p_primaryExpr_var(self, p):
-        '''primaryExpr : var'''
+        '''primaryExpr : varDiffOpt'''
         p[0] = self.lookupVar(p[1])
     def p_primaryExpr_boolLiteral(self, p):
         '''primaryExpr : boolLiteral
