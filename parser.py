@@ -304,7 +304,6 @@ class Parser:
         "elseif" : "ELSEIF",
         "true" : "TRUE",
         "false" : "FALSE",
-        "flag" : "FLAG",
         "param" : "PARAM",
         "accum" : "ACCUM",
         "diffvar" : "DIFFVAR",
@@ -425,17 +424,6 @@ class Parser:
         '''
         self.currentScope().junctions[p[2]] = None
         self.currentScope().setUnit(p[2],p[3])
-    def p_sharedStatement_flag(self, p):
-        '''sharedStatement : SHARED flagDeclBool ';'
-                           | SHARED flagDeclEnum ';'
-        '''
-        pass
-    def p_flagDeclBool(self, p):
-        '''flagDeclBool : FLAG var'''
-        pass
-    def p_flagDeclEnum(self, p):
-        '''flagDeclEnum : FLAG var '{' nameList '}' '''
-        pass
 
     def p_nameList_term(self, p):
         '''nameList : NAME'''
@@ -490,19 +478,6 @@ class Parser:
         '''paramStatement : PARAM assignDef '''
         pass
 
-    def p_providesStatement_flagDecl(self, p):
-        '''providesStatement : PROVIDES flagDeclBool ';'
-                             | PROVIDES flagDeclEnum ';'
-        '''
-        pass
-    def p_provdesStatement_flagBoolDefn(self, p):
-        '''providesStatement : PROVIDES flagDeclBool '=' boolLiteral ';' '''
-        pass
-    
-    def p_providesStatement_flagEnumDefn(self, p):
-        '''providesStatement : PROVIDES flagDeclEnum '=' NAME ';' '''
-        pass
-
     def p_providesStatement_DeclSubNoUnit(self, p):
         '''providesStatement : PROVIDES ACCUM var ';'
                              | PROVIDES DIFFVAR var ';'
@@ -545,7 +520,7 @@ class Parser:
     def p_conditionalStatement_vars(self, p):
         '''conditionalStatement : varDef'''
         pass
-
+    
     def p_varDef_assign(self, p):
         '''varDef : assignDef'''
         p[0] = p[1]
@@ -679,10 +654,6 @@ class Parser:
         pass
     def p_useExpr_uminus(self,p):
         '''useExpr : '-' useExpr %prec UMINUS'''
-        pass
-
-    def p_useBlockStatement_flagSet(self, p):
-        '''useBlockStatement : '.' speccedName '=' NAME ';' '''
         pass
 
     #def p_unitDefBar(self, p):
