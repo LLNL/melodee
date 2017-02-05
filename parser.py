@@ -458,7 +458,7 @@ class Parser:
             thisName = self.currentSubsystem().name + "." + thisName
         thisSubsystem = Subsystem(thisName)
         if self.timeVar != None:
-            thisSubsystem.scope.setSymbol(self.timeVar,sympy.symbol(self.timeVar))
+            thisSubsystem.scope.setSymbol(self.timeVar,sympy.symbols(self.timeVar))
             thisSubsystem.scope.setUnit(self.timeVar, self.timeUnit)
             thisSubsystem.time.add(self.timeVar)
             
