@@ -84,8 +84,12 @@ class Unit:
 class UnitSystem:
     def __init__(self, possibleBases):
         self.knownUnits = {}
-        self.possibleBases = possibleBases
-        for base in self.possibleBases:
+        self.possibleBases = set()
+        for base in possibleBases:
+            self.addBase(base)
+    def addBase(self, base):
+        if base not in self.possibleBases:
+            self.possibleBases.add(base)
             self.register(base, Unit(self, {base : 1}, 0))
     def register(self, name, unit):
         self.knownUnits[name] = unit
@@ -101,7 +105,7 @@ class UnitSystem:
     
 class Si(UnitSystem):
     def __init__(self):
-        baseSi = ['mol', 'm', 's', 'A', 'g', 'cd', 'K']
+        baseSi = ['mol', 'm', 's', 'A', 'g', 'cd', 'K', 'bool']
         UnitSystem.__init__(self, baseSi)
 
         s = list(baseSi)

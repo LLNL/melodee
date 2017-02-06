@@ -237,7 +237,9 @@ class Parser:
         
     def nodim(self):
         return ASTUnit(self.si.get("1"), False)
-
+    def boolean(self):
+        return ASTUnit(self.si.get("bool"), False)
+    
     def checkExplicitCast(self, castRaw, ast):
         retval=AST(ast.sympy, ASTUnit(castRaw, explicit=True))
         if ast.astUnit.isNull():
@@ -302,6 +304,7 @@ class Parser:
         "if" : "IF",
         "else" : "ELSE",
         "elseif" : "ELSEIF",
+        "bool" : "BOOL",
         "true" : "TRUE",
         "false" : "FALSE",
         "param" : "PARAM",
@@ -314,6 +317,7 @@ class Parser:
         "subsystem" : "SUBSYSTEM",
         "pow" : "POW",
         "convert" : "CONVERT",
+        "enum" : "ENUM",
         
         "integrate" : "INTEGRATE",
 
@@ -641,6 +645,15 @@ class Parser:
     def p_unitExpr_literal(self, p):
         '''unitExpr : NAME'''
         p[0] = self.si.get(p[1])
+    def p_unitExpr_bool(self, p):
+        '''unitExpr : BOOL'''
+        p[0] = self.si.get(p[1])
+    def p_unitExpr_enum(self, p):
+        '''unitExpr : ENUM '(' nameList ')' '''
+        unitName = "enum("+(",".join(p[3]))+")"
+        self.si.addBase(unitName)
+        p[0] = self.si.get(unitName)
+        #FIXME, all the unitNames need to be tagged with this unit.
     def p_unitExpr_1(self, p):
         '''unitExpr : ONE'''
         p[0] = self.si.get('1')
@@ -727,14 +740,14 @@ class Parser:
         p[0] = p[1]
     def p_orExpr_impl(self, p):
         '''orExpr : orExpr OR andExpr'''
-        p[0] = AST(sympy.Or(p[1].sympy,p[3].sympy),self.nodim())
+        p[0] = AST(sympy.Or(p[1].sympy,p[3].sympy),self.boolean())
 
     def p_andExpr_pass(self, p):
         '''andExpr : booleqExpr'''
         p[0] = p[1]
     def p_andExpr_impl(self, p):
         '''andExpr : andExpr AND booleqExpr'''
-        p[0] = AST(sympy.And(p[1].sympy,p[3].sympy),self.nodim())
+        p[0] = AST(sympy.And(p[1].sympy,p[3].sympy),self.boolean())
 
     def p_booleqExpr_pass(self, p):
         '''booleqExpr : relationExpr'''
@@ -748,7 +761,7 @@ class Parser:
         else:
             boolOp = sympy.Eq
         self.checkExactUnits(p[1].astUnit,p[3].astUnit)
-        p[0] = AST(boolOp(p[1].sympy,p[3].sympy),self.nodim())
+        p[0] = AST(boolOp(p[1].sympy,p[3].sympy),self.boolean())
 
     def p_relationExpr_pass(self, p):
         '''relationExpr : additiveExpr'''
@@ -768,7 +781,7 @@ class Parser:
         else:
             boolOp = sympy.Ge
         self.checkExactUnits(p[1].astUnit,p[3].astUnit)
-        p[0] = AST(boolOp(p[1].sympy,p[3].sympy),self.nodim())
+        p[0] = AST(boolOp(p[1].sympy,p[3].sympy),self.boolean())
 
     def p_additiveExpr_pass(self, p):
         '''additiveExpr : multiplicitiveExpr'''
@@ -806,7 +819,7 @@ class Parser:
         '''unaryExpr : NOT unaryExpr
                      | '!' unaryExpr
         '''
-        p[0] = AST(sympy.Not(p[2].sympy),self.nodim())
+        p[0] = AST(sympy.Not(p[2].sympy),self.boolean())
 
     def p_unitExpr_pass(self, p):
         '''unitLabelExpr : exponentExpr'''
@@ -861,7 +874,7 @@ class Parser:
     def p_primaryExpr_boolLiteral(self, p):
         '''primaryExpr : boolLiteral
         '''
-        p[0] = textToAST(p[1], self.nodim())
+        p[0] = textToAST(p[1], self.boolean())
     def p_boolLiteral(self, p):
         '''boolLiteral : TRUE
                        | FALSE
