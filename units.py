@@ -32,6 +32,8 @@ class Unit:
         self.scale = scale
 
     def isCompatibleWith(self, other):
+        if other == None:
+            return False
         if self.system != other.system:
             return False
         if len(self.bases) != len(other.bases):
