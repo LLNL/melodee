@@ -138,18 +138,27 @@ class SharedScope(Scope):
         self.junctions = {}
     def hasJunction(self, name):
         return name in self.junctions
+    def getJunction(self, name):
+        return self.junctions[name]
+    def setJunction(self, name, junction):
+        self.junctions[name] = junction
 
+class Junction:
+    def __init__(self,unit):
+        self.rawUnit = unit
+    
 class Subsystem:
     def __init__(self, name):
         self.name = name
         self.ssa = SSA()
         self.scope = SharedScope()
-        self.read = set()
-        self.diffvar = set()
-        self.accum = set()
-        self.provided = set()
-        self.time = set()
-
+        self.inputs = set()
+        self.outputs = set()
+        self.diffvars = set()
+        self.accums = set()
+        self.params = set()
+        self.time = None
+        self.paramDefault = {}
         
 
 class Parser:
@@ -181,7 +190,46 @@ class Parser:
         retval = self.scopeStack[-1]
         self.scopeStack[-1] = self.scopeStack[-1].getParent()
         return retval
-    def lookupVar(self, name):
+    def readAccessVar(self, name):
+        #if the var is an accum
+        if 0:
+            #syntax error: can't read from an accum
+            pass
+        #if the var has a symbol already
+        if 0:
+            # if this is a parameter that has never been read before
+            if 0:
+                #mark this parameter as frozen
+                pass
+            #get the symbol
+            #if this symbol has a unit defined
+            if 0:
+                #set the unit to this symbol
+                pass
+            else:
+                #lookup the unit for the symbol if it's been assigned to
+                pass
+        else:
+            #see if this is a shared var
+            if 0:
+                #make a symbol for this guy, mark it as an input
+                #repeat the lookup command now that we have a symbol
+                pass
+            #check for a timevar
+            elif 0:
+                #make a symbol for this guy, mark it as time
+                #repeat the lookup for this command now that we have a symbol
+                pass
+            #check for an enumeration
+            elif 0:
+                #make a symbol for this guy, mark it as frozen
+                #repeat the lookup for this command now that we have a symbol
+                pass
+            else:
+                #syntax error
+                pass
+            
+        
         #search for a local variable
         if self.currentScope().hasSymbol(name):
             symbol = self.currentScope().getSymbol(name)
@@ -194,17 +242,66 @@ class Parser:
         else:
             #check previous scopes for junctions
             assert(len(self.scopeStack) >= 2)
-            assert(len(self.subsystemStack) >= 1)
-            for ii in range(len(self.scopeStack)-2,0,-1):
-                if self.scopeStack[ii].hasJunction(name):
-                    assert(self.scopeStack[ii].hasUnit(name))
-                    symbol = sympy.symbols(name)
-                    self.currentSubsystem().scope.setSymbol(name, symbol)
-                    self.currentSubsystem().scope.setUnit(name, self.scopeStack[ii].getUnit(name))
-                    #FIXME, add junctions here.
-                    return self.lookupVar(name)
+            (exists, junction) = self.searchForJunction(name)
+            if exists:
+                symbol = sympy.symbols(name)                
+                self.currentSubsystem().scope.setSymbol(name, symbol)
+                self.currentSubsystem().scope.setUnit(name, junction.rawUnit)
+                return self.readAccessVar(name)
             else:
                 raise SyntaxError("Variable '"+name+"' used but not defined.")
+    def checkDeclarable(self, var):
+        #if the variable is already type defined in this subsystem
+        ss = self.currentSubsystem()
+        if var in ss.inputs:
+            raise SyntaxError("'%s' already used as a shared variable in this subsystem." % var)
+        if var in ss.diffvars:
+            raise SyntaxError("'%s' already defined as a differential variable in this subsystem." % var)
+        if var in ss.accums:
+            raise SyntaxError("'%s' already defined as an accumulation output for this subsystem." % var)
+        if var in ss.params:
+            raise SyntaxError("'%s' already defined as a parameter for this subsystem." % var)
+        if var in ss.outputs:
+            raise SyntaxError("'%s' already an output for this subsystem." % var)
+        if var == ss.time:
+            raise SyntaxError("'%s' already used as the integration variable for this subsystem." % var) 
+        #if the variable has already been assigned in this subsystem
+        if ss.scope.hasSymbol(var) and ss.scope.getSymbol(var) in ss.ssa:
+            raise SyntaxError("'%s' has already been assigned to, it can't now be declared." % var)
+        #if the variable is already unit defined in this subsystem
+        if ss.scope.hasUnit(var):
+            raise SyntaxError("Units previously defined for '%s'" % var) 
+    
+    def markProvides(self, varname, unitOpt):
+        self.checkDeclarable(varname)
+        #if this variable connects to another variable
+        (exists, junction) = self.searchForJunction(varname)
+        if exists:
+            #get the unit for that junction
+            junctionUnit = junction.rawUnit
+            #if a unit was defined and that unit does not match the junction unit
+            if unitOpt != None and unitOpt != junctionUnit:
+                raise SyntaxError("Provided units for '%s' don't match the shared units")
+            unit = junctionUnit
+        else:
+            #if a unit was not provided
+            if unitOpt == None:
+                raise SyntaxError("Must have a unit for provides variable '%s'." % varname)
+            unit = unitOpt
+            junction = Junction(unit)
+            #make a new junction with a unit
+            self.currentSubsystem().scope.junction[varname] = junction
+        self.currentScope().setUnit(varname, unit)
+        self.currentSubsystem().outputs.add(varname)
+        #return the junction
+        return junction
+
+    def searchForJunction(self, name):
+        assert(len(self.subsystemStack) >= 1)
+        for ii in range(len(self.scopeStack)-2,0,-1):
+            if self.scopeStack[ii].hasJunction(name):
+                return (True, self.scopeStack[ii].getJunction(name))
+        return (False, None)
 
     def processIfCondition(self, ifVar, thenBody, elseBody):
 
@@ -430,8 +527,7 @@ class Parser:
     def p_sharedStatement_unit(self, p):
         '''sharedStatement : SHARED var unitDef ';'
         '''
-        self.currentScope().junctions[p[2]] = None
-        self.currentScope().setUnit(p[2],p[3])
+        self.currentScope().setJunction(p[2], Junction(p[3]))
 
     def p_nameList_term(self, p):
         '''nameList : NAME'''
@@ -448,12 +544,7 @@ class Parser:
         thisName = p[2]
         if self.subsystemStack:
             thisName = self.currentSubsystem().name + "." + thisName
-        thisSubsystem = Subsystem(thisName)
-        if self.timeVar != None:
-            thisSubsystem.scope.setSymbol(self.timeVar,sympy.symbols(self.timeVar))
-            thisSubsystem.scope.setUnit(self.timeVar, self.timeUnit)
-            thisSubsystem.time.add(self.timeVar)
-            
+        thisSubsystem = Subsystem(thisName)            
         self.subsystemStack.append(Subsystem(thisName))
         self.scopeStack.append(self.currentSubsystem().scope)
         
@@ -473,7 +564,15 @@ class Parser:
 
     def p_subSystemStatement_accum(self, p):
         '''subSystemStatement : PROVIDES ACCUM var unitOpt accumDefOpt ';' '''
+        junction = self.markProvides(p[3],p[4])
+        #mark that junction as an accum junction
+        #FIXME
+        #mark the variable as an accum
+        self.currentSubsystem().accums.add(p[3])
+        #if there's a definition, process it.
+        #FIXME
         pass
+        
     def p_accumDefOpt_empty(self, p):
         '''accumDefOpt : empty'''
         p[0] = None
@@ -482,7 +581,7 @@ class Parser:
                        | MINUSEQ realExpr
         '''
         rhs = p[2]
-        if p[1] == 'MINUSEQ':
+        if p[1] == '-=':
             rhs = AST(sympy.Mul(sympy.Integer(-1),rhs.sympy, rhs.astUnit))
         p[0] = rhs
 
@@ -490,6 +589,18 @@ class Parser:
         '''subSystemStatement : PROVIDES PARAM var unitOpt assignOpt ';' 
                               |          PARAM var unitDef assignOpt ';' 
         '''
+        #if this is a provides
+        if p[1] == "provides":
+            (var, unit, assignOpt) = (p[3],p[4],p[5])
+            self.markProvides(var,unit)
+        else:
+            (var, unit, assignOpt) = (p[2],p[3],p[4])
+            self.checkDeclarable(var)
+            self.currentScope().setUnit(var,unit)
+        #mark the variable as a parameter.
+        self.currentSubsystem().params.add(var)
+        #if there's a definition, process it.
+        #FIXME
         pass
     def p_assignOpt_empty(self, p):
         '''assignOpt : empty'''
@@ -504,9 +615,26 @@ class Parser:
         '''
         if self.timeUnit is None:
             raise SyntaxError("Must include an 'integrate' statement before declaring subsystems.")
-        pass
+        #if this is a provides
+        if p[1] == "provides":
+            (var, unit) = (p[3],p[4])
+            self.markProvides(var,unit)
+        else:
+            (var, unit) = (p[2],p[3])
+            self.checkDeclarable(var)
+            self.currentScope().setUnit(var,unit)
+        #mark the variable as a diffvar
+        self.currentSubsystem().diffvars.add(var)
+        #mark the units for the initial and diff conditions
+        rawUnit = self.currentScope().getUnit(var)
+        self.currentScope().setUnit(var+".init", rawUnit)
+        self.currentScope().setUnit(var+".diff", rawUnit/self.timeUnit)
+
     def p_subSystemStatement_output(self, p):
         '''subSystemStatement : PROVIDES var unitOpt assignOpt ';' '''
+        self.markProvides(p[2],p[3])
+        #if there's a definition, process it.
+        #FIXME
         pass
 
     
@@ -538,7 +666,6 @@ class Parser:
                                 | varDiffOpt unitOpt EXPONEQ realExpr ';'
         '''
         pass
-        #FIXME, need to get the time unit here.
 
     ########################################################################
     def p_subSystemStatement_if(self, p):
@@ -874,7 +1001,7 @@ class Parser:
 
     def p_primaryExpr_var(self, p):
         '''primaryExpr : varDiffOpt'''
-        p[0] = self.lookupVar(p[1])
+        p[0] = self.readAccessVar(p[1])
     def p_primaryExpr_boolLiteral(self, p):
         '''primaryExpr : boolLiteral
         '''
