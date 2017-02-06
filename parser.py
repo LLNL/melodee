@@ -94,7 +94,6 @@ class Scope:
         self.parent = parent
         self.symbols = {}
         self.units = {}
-        self.junctions = {}
         self.instructions = []
     def makeChild(self):
         return Scope(self)
@@ -130,16 +129,21 @@ class Scope:
         self.symbols[name] = symbol
     def setUnit(self, name, unit):
         self.units[name] = unit
-    def hasJunction(self, name):
-        return name in self.junctions
     def addInstruction(self, inst):
         self.instructions.addInstruction(inst)
-    
+
+class SharedScope(Scope):
+    def __init__(self):
+        Scope.__init__(self, None)
+        self.junctions = {}
+    def hasJunction(self, name):
+        return name in self.junctions
+
 class Subsystem:
     def __init__(self, name):
         self.name = name
         self.ssa = SSA()
-        self.scope = Scope()
+        self.scope = SharedScope()
         self.read = set()
         self.diffvar = set()
         self.accum = set()
@@ -160,7 +164,7 @@ class Parser:
         )
         self.si = units.Si()
         self.subsystemStack = []
-        self.scopeStack = [Scope()]
+        self.scopeStack = [SharedScope()]
         self.timeVar = None
         self.timeUnit = None
         
