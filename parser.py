@@ -28,15 +28,19 @@ import ply.yacc as yacc
 import sympy
 import units
 
+class Symbol(sympy.symbol.Dummy):
+    def __init__(self, *args, **kwargs):
+        sympy.symbol.Dummy.__init__(self, *args, **kwargs)
+    def __str__(self):
+        ret = sympy.symbol.Dummy.__str__(self)
+        return ret[1:]
+
 class SSA(dict):
     def __setitem__(self, key, value):
         if key in self:
+            print key, value
             raise MultipleSymbolAssignment(key)
-        self[key]=value
-
-class InstructionList(list):
-    def addInstruction(self, instruction):
-        self.append(instruction)
+        dict.__setitem__(self,key,value)
 
 class IfInstruction:
     def __init__(self, ifVar, thenInstructions, elseInstructions, choiceInstructions):
@@ -130,7 +134,7 @@ class Scope:
     def setUnit(self, name, unit):
         self.units[name] = unit
     def addInstruction(self, inst):
-        self.instructions.addInstruction(inst)
+        self.instructions.append(inst)
 
 class SharedScope(Scope):
     def __init__(self):
@@ -176,13 +180,13 @@ class Parser:
         self.scopeStack = [SharedScope()]
         self.timeVar = None
         self.timeUnit = None
+        self.enumerations = {}
+        self.tempCount = 0
         
     def currentSubsystem(self):
         return self.subsystemStack[-1]
     def currentScope(self):
         return self.scopeStack[-1]
-    def currentInstructions(self):
-        return self.currentScope().instructions
     def pushScope(self):
         self.scopeStack[-1] = self.scopeStack[-1].makeChild()
         return self.scopeStack[-1]
@@ -190,66 +194,59 @@ class Parser:
         retval = self.scopeStack[-1]
         self.scopeStack[-1] = self.scopeStack[-1].getParent()
         return retval
-    def readAccessVar(self, name):
+    def readAccessVar(self, var):
+        subsystem = self.currentSubsystem()
+        scope = self.currentScope()
         #if the var is an accum
-        if 0:
-            #syntax error: can't read from an accum
-            pass
+        if var in subsystem.accums:
+            raise SyntaxError("Can't read from accumulation variable '%s'." % var)
         #if the var has a symbol already
-        if 0:
+        if scope.hasSymbol(var):
+            symbol = scope.getSymbol(var)
             # if this is a parameter that has never been read before
-            if 0:
+            #FIXME
+            if 0:#var in subsystem.params and var not in subsystem.paramDefault:
                 #mark this parameter as frozen
+                #subsystem.paramDefault[var] = symbol
+                #symbol = Symbol(var)
+                #subsystem.
                 pass
             #get the symbol
             #if this symbol has a unit defined
-            if 0:
-                #set the unit to this symbol
-                pass
+            if scope.hasUnit(var):
+                rawUnit = scope.getUnit(var)
+            elif symbol in subsystem.ssa:
+                rawUnit = subsystem.ssa[symbol].astunit.rawUnit
             else:
-                #lookup the unit for the symbol if it's been assigned to
-                pass
-        else:
-            #see if this is a shared var
-            if 0:
-                #make a symbol for this guy, mark it as an input
-                #repeat the lookup command now that we have a symbol
-                pass
-            #check for a timevar
-            elif 0:
-                #make a symbol for this guy, mark it as time
-                #repeat the lookup for this command now that we have a symbol
-                pass
-            #check for an enumeration
-            elif 0:
-                #make a symbol for this guy, mark it as frozen
-                #repeat the lookup for this command now that we have a symbol
-                pass
-            else:
-                #syntax error
-                pass
-            
-        
-        #search for a local variable
-        if self.currentScope().hasSymbol(name):
-            symbol = self.currentScope().getSymbol(name)
-            rawUnit = None
-            if self.currentScope().hasUnit(name):
-                rawUnit = self.currentScope().getUnit(name)
-            else:
-                rawUnit = self.currentSubsystem().ssa[symbol].astUnit.rawUnit
+                rawUnit = None
             return AST(symbol, ASTUnit(rawUnit, explicit=False))
         else:
-            #check previous scopes for junctions
-            assert(len(self.scopeStack) >= 2)
-            (exists, junction) = self.searchForJunction(name)
+            #FIXME the approach here breaks in if conditions if we allow vars to be overwritten (like enumerations)
+            #see if this is a shared var
+            (exists, junction) = self.searchForJunction(var)
             if exists:
-                symbol = sympy.symbols(name)                
-                self.currentSubsystem().scope.setSymbol(name, symbol)
-                self.currentSubsystem().scope.setUnit(name, junction.rawUnit)
-                return self.readAccessVar(name)
+                #make a symbol for this guy, mark it as an input
+                symbol = Symbol(var)
+                subsystem.scope.setSymbol(var, symbol)
+                subsystem.scope.setUnit(var, junction.rawUnit)
+                subsystem.inputs.add(var)
+                #repeat the lookup command now that we have a symbol
+                return self.readAccessVar(var)
+            #check for a timevar
+            elif var == self.timeVar:
+                #make a symbol for this guy, mark it as time
+                symbol = Symbol(var)
+                subsystem.scope.setSymbol(var, symbol)
+                subsystem.scope.setUnit(var, self.timeUnit)
+                subsystem.timeVar = var
+                #repeat the lookup for this command now that we have a symbol
+                return self.readAccessVar(var)
+            #check for an enumeration
+            elif var in self.enumerations:
+                return self.enumerations[var]
             else:
-                raise SyntaxError("Variable '"+name+"' used but not defined.")
+                raise SyntaxError("Variable '%s' used but not defined." % var)
+
     def checkDeclarable(self, var):
         #if the variable is already type defined in this subsystem
         ss = self.currentSubsystem()
@@ -303,38 +300,43 @@ class Parser:
                 return (True, self.scopeStack[ii].getJunction(name))
         return (False, None)
 
-    def processIfCondition(self, ifVar, thenBody, elseBody):
+    def newTempVar(self):
+        current = self.tempCount
+        self.tempCount += 1
+        return "__melodee_temp_%03d" % current
+    
+    def processIfCondition(self, ifExpr, thenScope, elseScope):
+        choiceInstructions = []
 
-        choiceInstructions = InstructionList()
-        thenSymbols = thenBody[1]
-        elseSymbols = elseBody[1]
-
-        for (key,(thenSympy, thenUnit)) in thenSymbols.local().items():
-            if key in elseSymbols: #no local here, to catch both then and else
-                (elseSympy, elseUnit) = elseSymbols[key]
-                choice = Choice(ifVar,
-                                thenSympy,
-                                elseSympy,
-                                ASTUnit.null() # FIXME?
-                                )
-                self.astToSymbol(key,choice)
+        self.checkExactUnits(ifExpr.astUnit, self.boolean())
+        var = self.newTempVar()
+        symbol = Symbol(var)
+        self.currentSubsystem().ssa[symbol] = ifExpr
+        self.currentScope().addInstruction(symbol)
+        ifSymbol = symbol
         
-        for (key, (elseSympy,elseUnit)) in elseSymbols.local().items():
-            if key in thenSymbols.local(): #local here so we don't violate ssa
-                (thenSympy, thenUnit) = thenSymbols[key]
-                choice = Choice(ifVar,
-                                thenSympy,
-                                elseSympy,
-                                ASTUnit.null() # FIXME?
-                                )
-                self.astToSymbol(key,choice)
+        #iterate over local symbols
+        for var in order(set(thenScope.symbols.keys()) & set(elseScope.symbols.keys())):
+            #make sure the units match
+            if thenScope.hasUnit(var) and elseScope.hasUnit(var):
+                unit = thenScope.getUnit(var)
+                if unit != elseScope.hasUnit(var):
+                    raise SyntaxError("if condition for '%s' declares different units depending on branch." % var)
+                self.currentScope().setUnit(var, unit)
+            elif not thenScope.hasUnit(var) and not elseScope.hasUnit(var):
+                unit = None
+            else:
+                raise SyntaxError("if condition for '%s' declares different units depending on branch." % var)
+            
+            choice = Choice(ifSymbol, thenScope.getSymbol(var), elseScope.getSymbol(var),
+                            ASTUnit(unit, False))
+            symbol = Symbol(var)
+            self.currentSubsystem.ssa[symbol] = choice
+            choiceInstructions.append(symbol)
+            self.currentScope().setSymbol(var, symbol)
 
-        thenInstructions = thenBody[0]
-        elseInstructions = elseBody[0]
-        iif = IfInstruction(ifVar,thenInstructions,elseInstructions,choiceInstructions)
-        self.currentInstructions().addInstruction(iif)
-        #fixme fill in the current symbol table with the choice stuff?
-
+        iif = IfInstruction(ifSymbol,thenScope.instructions,elseScope.instructions,choiceInstructions)
+        self.currentScope().addInstruction(iif)
         
     def nodim(self):
         return ASTUnit(self.si.get("1"), False)
@@ -378,17 +380,17 @@ class Parser:
     def parse(self, s):
         return self.parser.parse(s)
 
-    def astToVar(self, var, ast):
-        self.currentSubsystem().ssa[var] = ast
-        self.currentInstructions().addInstruction(var)
-        return (var, ast.astUnit)
+    #def astToVar(self, var, ast):
+    #    self.currentSubsystem().ssa[var] = ast
+    #    self.currentScope().addInstruction(var)
+    #    return (var, ast.astUnit)
         
-    def astToTemp(self, ast):
-        return self.astToVar(self.newTempVar(),ast)
-    def astToSymbol(self, name, ast):
-        (var, astUnit) = self.astToVar(sympy.symbols(name),ast)
-        self.currentScope().setSymbol(name, var)
-        return (var, astUnit)
+    #def astToTemp(self, ast):
+    #    return self.astToVar(self.newTempVar(),ast)
+    #def astToSymbol(self, name, ast):
+    #    (var, astUnit) = self.astToVar(Symbol(name),ast)
+    #    self.currentScope().setSymbol(name, var)
+    #    return (var, astUnit)
         
     
     t_ignore = " \t\r"
@@ -676,7 +678,7 @@ class Parser:
         '''ifStatement : initialIfCond thenBody elseOpt'''
         self.processIfCondition(p[1],p[2],p[3])
     def p_initialIfCond(self,p):
-        '''initialIfCond : IF '(' realExprToTemp ')' '''
+        '''initialIfCond : IF '(' realExpr ')' '''
         p[0] = p[3]
     def p_thenBody(self,p):
         '''thenBody : '{' ifScopeBegin conditionalStatementsOpt '}' '''
@@ -688,7 +690,7 @@ class Parser:
         p[0] = self.popScope()
 
     def p_elseIfCond(self, p):
-        '''elseIfCond : ELSEIF '(' realExprToTemp ')' '''
+        '''elseIfCond : ELSEIF '(' realExpr ')' '''
         p[0] = p[4]
     def p_elseOpt_continue(self, p):
         '''elseOpt : ifScopeBegin elseIfCond thenBody elseOpt'''
@@ -783,8 +785,11 @@ class Parser:
         '''unitExpr : ENUM '(' nameList ')' '''
         unitName = "enum("+(",".join(p[3]))+")"
         self.si.addBase(unitName)
-        p[0] = self.si.get(unitName)
-        #FIXME, all the unitNames need to be tagged with this unit.
+        unit = self.si.get(unitName)
+        ii=0
+        for name in p[3]:
+            self.enumerations[name] = AST(textToAST(str(ii), ASTUnit(unit, False)))
+        p[0] = unit
     def p_unitExpr_1(self, p):
         '''unitExpr : ONE'''
         p[0] = self.si.get('1')
@@ -831,41 +836,37 @@ class Parser:
         '''ternaryExpr : orExpr'''
         p[0] = p[1]
     def p_ternaryOp_impl(self, p):
-        '''ternaryExpr : ternaryIf ternaryThen ternaryElse'''
-        resultUnit = self.checkExactUnits(p[1][1],p[2][1])
-        ast = Choice(p[0],p[1][0],p[2][0],resultUnit)
+        '''ternaryExpr : orExpr '?' realExpr ':' realExpr'''
+        retUnit = self.checkExactUnits(p[3].astUnit,p[5].astUnit)
 
-        self.instructionStack.append(InstructionList())
-        (var,unit) = self.astToTemp(ast)
-        choiceInstructions = self.instructionStack.pop()
+        self.checkExactUnits(p[1].astUnit, self.boolean())
+        var = self.newTempVar()
+        symbol = Symbol(var)
+        self.currentSubsystem().ssa[symbol] = p[1]
+        self.currentScope().addInstruction(symbol)
+        ifSymbol = symbol
+        
+        var = self.newTempVar()
 
-        self.currentInstructions().addInstruction(IfInstruction(p[0],p[1][2], p[2][2]),choiceInstructions)
-        p[0] = AST(var,unit)
-        
-    def p_ternaryIf(self, p):
-        '''ternaryIf : orExpr '?' '''
-        (var, unit) = self.astToTemp(p[1])
-        p[0] = var
+        symbol = Symbol(var)
+        self.currentSubsystem().ssa[symbol] = p[3]
+        thenSymbol = symbol
 
-    def p_realExprToTemp(self,p):
-        '''realExprToTemp : realExpr'''
-        p[0] = self.astToTemp(p[1])
-        
-    def p_ternaryThen(self, p):
-        '''ternaryThen : pushNewInstructionList realExprToTemp'''
-        (var,unit) = p[2]
-        instructions = self.instructionStack.pop()
-        p[0] = (var,unit,instructions)
-    def p_ternaryElse(self, p):
-        '''ternaryElse : ':' pushNewInstructionList realExprToTemp'''
-        (var,unit) = p[3]
-        instructions = self.instructionStack.pop()
-        p[0] = (var,unit,instructions)
-        
-    def p_pushNewInstructionList(self, p):
-        '''pushNewInstructionList : empty'''
-        self.instructionStack.append(InstructionList())
-        
+        symbol = Symbol(var)
+        self.currentSubsystem().ssa[symbol] = p[5]
+        elseSymbol = symbol
+
+        choice = Choice(ifSymbol,thenSymbol,elseSymbol,retUnit)
+
+        symbol = Symbol(var)
+        self.currentSubsystem().ssa[symbol] = choice
+        choiceSymbol = symbol
+
+        iif = IfInstruction(ifSymbol,[thenSymbol],[elseSymbol],[choiceSymbol])
+        self.currentScope().addInstruction(iif)
+
+        p[0] = AST(choiceSymbol, retUnit)
+                
     def p_orExpr_pass(self,p):
         '''orExpr : andExpr'''
         p[0] = p[1]
@@ -1065,10 +1066,10 @@ and && or || not ! 0 2.0 .3 40. 5e+6 if myID */* bljsadfj */ */
 
     p = Parser(start="realExpr")
     p.p_subSystemBegin("testing")
-    p.currentScope().setSymbol("a", sympy.symbols("a"))
-    p.currentScope().setSymbol("b", sympy.symbols("b"))
-    p.currentScope().setSymbol("c", sympy.symbols("c"))
-    p.currentScope().setSymbol("d", sympy.symbols("d"))
+    p.currentScope().setSymbol("a", Symbol("a"))
+    p.currentScope().setSymbol("b", Symbol("b"))
+    p.currentScope().setSymbol("c", Symbol("c"))
+    p.currentScope().setSymbol("d", Symbol("d"))
     p.currentScope().setUnit("a", p.si.get("unitless"))
     p.currentScope().setUnit("b", p.si.get("unitless"))
     p.currentScope().setUnit("c", p.si.get("ms"))
