@@ -36,13 +36,16 @@ class Unit:
             return False
         if self.system != other.system:
             return False
-        if len(self.bases) != len(other.bases):
-            return False
         for (base,power) in self.bases.items():
-            if not other.bases.has_key(base):
-                return False
-            elif other.bases[base] != power:
-                return False
+            if power != 0:
+                if not other.bases.has_key(base):
+                    return False
+                elif other.bases[base] != power:
+                    return False
+        for (base,power) in other.bases.items():
+            if power != 0:
+                if base not in self.bases:
+                    return False
         return True
     def __eq__(self, other):
         return self.isCompatibleWith(other) and self.scale == other.scale
