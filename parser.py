@@ -260,7 +260,7 @@ class Parser:
                 symbol = Symbol(var)
                 subsystem.scope.setSymbol(var, symbol)
                 subsystem.scope.setUnit(var, self.timeUnit)
-                subsystem.timeVar = var
+                subsystem.time = var
                 #repeat the lookup for this command now that we have a symbol
                 return self.readAccessVar(var)
             #check for an enumeration
@@ -268,7 +268,60 @@ class Parser:
                 return self.enumerations[var]
             else:
                 raise XXXSyntaxError("Variable '%s' used but not defined." % var)
+    def processAssignment(self, var, operand, rhs):
+        subsystem = self.currentSubsystem()
+        scope = self.currentScope()
+        #error if this is a diffvar
+        if var in subsystem.diffvars:
+            raise XXXSyntaxError("Can't assign to differential variable '%s'." % var)
+        if var in subsystem.inputs:
+            raise XXXSyntaxError("Can't assign to shared variable '%s'." % var)
+        if var == self.timeVar:
+            raise XXXSyntaxError("Can't assign to integration variable '%s'." % var)
+        #elif var in self.params and var in self.paramDefault: #FIXME
+        #    raise XXXSyntaxError("Can't assign to parameter '%s' once it has been read." % var)
+        if var in subsystem.accums:
+            if operand != '+=' and operand != '-=':
+                raise XXXSyntaxError("Can only += or -= accumulation variable '%s'."%var)
+        if var not in subsystem.outputs and not scope.hasSymbol(var):
+            (exists, dontcare) = self.searchForJunction(var)
+            if exists:
+                raise XXXSyntaxError("Can't assign to shared variable '%s'." % var)
 
+        if operand != '=':
+            if not scope.hasSymbol(var):
+                if var in subsystem.accums:
+                    lhs = textToAST("0",ASTUnit(scope.getUnit(var),False))
+                else:
+                    raise XXXSyntaxError("'%s' used before assignment."%var)
+            else:
+                lhs = self.readAccessVar(var)
+            if operand == '+=' or operand == '-=':
+                if operand == '-=':
+                    rhs = AST(sympy.Mul(sympy.Integer(-1),rhs.sympy, rhs.astUnit))
+                rhs = AST(sympy.Add(lhs.sympy,rhs.sympy), self.checkExactUnits(lhs.astUnit,rhs.astUnit))
+            elif operand == '*=' or operand == '/=':
+                if operand == "/=":
+                    rhs = AST(sympy.Pow(rhs.sympy,sympy.Integer(-1)), rhs.astUnit ** -1)
+                rhs = AST(sympy.Mul(lhs.sympy,rhs.sympy), lhs.astUnit*rhs.astUnit)
+            elif operand == '^=':
+                rhs = self.powerProcess(lhs, rhs)
+            else:
+                assert(0)
+
+        #Time to do final unit checks
+        if scope.hasUnit(var):
+            print var
+            print scope.getUnit(var)
+            print rhs
+            rhs = self.checkExplicitCast(scope.getUnit(var), rhs)
+
+        #ok, we're ready to do the assignment!
+        symbol = Symbol(var)
+        subsystem.ssa[symbol] = rhs
+        scope.addInstruction(symbol)
+        scope.setSymbol(var, symbol)
+            
     def checkDeclarable(self, var):
         #if the variable is already type defined in this subsystem
         ss = self.currentSubsystem()
@@ -282,8 +335,8 @@ class Parser:
             raise XXXSyntaxError("'%s' already defined as a parameter for this subsystem." % var)
         if var in ss.outputs:
             raise XXXSyntaxError("'%s' already an output for this subsystem." % var)
-        if var == ss.time:
-            raise XXXSyntaxError("'%s' already used as the integration variable for this subsystem." % var) 
+        if var == self.timeVar:
+            raise XXXSyntaxError("'%s' already used as the integration variable." % var) 
         #if the variable has already been assigned in this subsystem
         if ss.scope.hasSymbol(var) and ss.scope.getSymbol(var) in ss.ssa:
             raise XXXSyntaxError("'%s' has already been assigned to, it can't now be declared." % var)
@@ -598,8 +651,9 @@ class Parser:
         #mark the variable as an accum
         self.currentSubsystem().accums.add(p[3])
         #if there's a definition, process it.
-        #FIXME
-        pass
+        if p[5] != None:
+            (operand, rhs) = p[5]
+            self.processAssignment(p[3],operand, rhs)
         
     def p_accumDefOpt_empty(self, p):
         '''accumDefOpt : empty'''
@@ -608,10 +662,7 @@ class Parser:
         '''accumDefOpt : PLUSEQ  realExpr
                        | MINUSEQ realExpr
         '''
-        rhs = p[2]
-        if p[1] == '-=':
-            rhs = AST(sympy.Mul(sympy.Integer(-1),rhs.sympy, rhs.astUnit))
-        p[0] = rhs
+        p[0] = (p[1],p[2])
 
     def p_subSystemStatement_param(self, p):
         '''subSystemStatement : PROVIDES PARAM var unitOpt assignOpt ';' 
@@ -628,14 +679,14 @@ class Parser:
         #mark the variable as a parameter.
         self.currentSubsystem().params.add(var)
         #if there's a definition, process it.
-        #FIXME
-        pass
+        if assignOpt != None:
+            self.processAssignment(var,'=', assignOpt)
     def p_assignOpt_empty(self, p):
         '''assignOpt : empty'''
         p[0] = None
     def p_assignOpt_def(self, p):
         '''assignOpt : '=' realExpr'''
-        p[0] = p[1]
+        p[0] = p[2]
 
     def p_subSystemStatement_diffvar(self, p):
         '''subSystemStatement : PROVIDES DIFFVAR var unitOpt ';'
@@ -662,9 +713,8 @@ class Parser:
         '''subSystemStatement : PROVIDES var unitOpt assignOpt ';' '''
         self.markProvides(p[2],p[3])
         #if there's a definition, process it.
-        #FIXME
-        pass
-
+        if p[4] != None:
+            self.processAssignment(p[2],'=',p[4]) 
     
     def p_unitOpt_empty(self, p):
         '''unitOpt : empty '''
@@ -693,7 +743,15 @@ class Parser:
                                 | varDiffOpt unitOpt DIVIDEEQ realExpr ';'
                                 | varDiffOpt unitOpt EXPONEQ realExpr ';'
         '''
-        pass
+        var = p[1]
+        unitOpt = p[2]
+        if unitOpt != None:
+            if self.currentScope().hasUnit(var):
+                if self.currentScope().getUnit(var) != unitOpt:
+                    raise XXXSyntaxError("Declared units for '%s' don't match established declaration." % var)
+            else:
+                self.currentScope().setUnit(var, unitOpt)
+        self.processAssignment(var, p[3], p[4])        
 
     ########################################################################
     def p_subSystemStatement_if(self, p):
@@ -1062,12 +1120,12 @@ class Parser:
         '''empty :'''
         pass
 
-    def p_statementRecovery(self,p):
-        '''subSystemStatement : error ';' '''
-        print "moving on from syntax error on line number "+str(self.lexer.lineno)
-    def p_subsystemRecovery(self,p):
-        '''subSystemDefinition : SUBSYSTEM NAME '{' error '}' '''
-        print "moving on from syntax error on line number "+str(self.lexer.lineno)
+    #def p_statementRecovery(self,p):
+    #    '''subSystemStatement : error ';' '''
+    #    print "moving on from syntax error on line number "+str(self.lexer.lineno)
+    #def p_subsystemRecovery(self,p):
+    #    '''subSystemDefinition : SUBSYSTEM NAME '{' error '}' '''
+    #    print "moving on from syntax error on line number "+str(self.lexer.lineno)
     
     def p_error(self,p):
         if p:
