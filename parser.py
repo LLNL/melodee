@@ -28,12 +28,19 @@ import ply.yacc as yacc
 import sympy
 import units
 
+class XXXSyntaxError:
+    def __init__(self, text):
+        self.text = text
+    def __str__(self):
+        return self.text
+
 class Symbol(sympy.symbol.Dummy):
     def __init__(self, *args, **kwargs):
         sympy.symbol.Dummy.__init__(self, *args, **kwargs)
     def __str__(self):
         ret = sympy.symbol.Dummy.__str__(self)
-        return ret[1:]
+        #return ret[1:]
+        return ret
 
 class SSA(dict):
     def __setitem__(self, key, value):
@@ -59,7 +66,7 @@ class Choice:
         return 'Choice(%s,%s,%s,%s)' % (repr(self.ifVar),
                                         repr(self.thenVar),
                                         repr(self.elseVar),
-                                        repr(self.unit),
+                                        repr(self.astUnit),
         )
 
 class AST:
@@ -174,7 +181,7 @@ def strifyInstructions(ilist, ssa, indent=0):
     myIndent = "   "*indent
     ret = ""
     for instruction in ilist:
-        if instruction is IfInstruction:
+        if isinstance(instruction,IfInstruction):
             ret += myIndent + "if (%s) {\n" % instruction.ifVar
             ret += strifyInstructions(instruction.thenInstructions,ssa,indent+1)
             ret += myIndent + "} else {\n"
@@ -311,9 +318,9 @@ class Parser:
 
         #Time to do final unit checks
         if scope.hasUnit(var):
-            print var
-            print scope.getUnit(var)
-            print rhs
+            #print var
+            #print scope.getUnit(var)
+            #print rhs
             rhs = self.checkExplicitCast(scope.getUnit(var), rhs)
 
         #ok, we're ready to do the assignment!
@@ -370,7 +377,7 @@ class Parser:
 
     def searchForJunction(self, name):
         assert(len(self.subsystemStack) >= 1)
-        for ii in range(len(self.scopeStack)-2,0,-1):
+        for ii in range(len(self.scopeStack)-1,0,-1):
             if self.scopeStack[ii].hasJunction(name):
                 return (True, self.scopeStack[ii].getJunction(name))
         return (False, None)
@@ -615,8 +622,9 @@ class Parser:
 
     def p_subSystemDefinition(self, p):
         '''subSystemDefinition : subSystemBegin subSystemStatementsOpt '}' '''
+        self.scopeStack.pop()
         thisSubsystem = self.subsystemStack.pop()
-        #print strifyInstructions(thisSubsystem.scope.instructions, thisSubsystem.ssa)
+        print strifyInstructions(thisSubsystem.scope.instructions, thisSubsystem.ssa)
         p[0] = thisSubsystem
 
     def p_subSystemBegin(self, p):
@@ -640,7 +648,7 @@ class Parser:
 
     def p_subSystemStatement_subSystem(self, p):
         '''subSystemStatement : subSystemDefinition'''
-        print self.subsystemStack
+        #print self.subsystemStack
         pass
 
     def p_subSystemStatement_accum(self, p):
@@ -692,7 +700,7 @@ class Parser:
         '''subSystemStatement : PROVIDES DIFFVAR var unitOpt ';'
                               |          DIFFVAR var unitDef ';' 
         '''
-        if self.timeUnit is None:
+        if self.timeUnit == None:
             raise XXXSyntaxError("Must include an 'integrate' statement before declaring subsystems.")
         #if this is a provides
         if p[1] == "provides":
@@ -1062,7 +1070,7 @@ class Parser:
         p[0] = self.convertUnitTo(p[3], p[5])
     def p_functionExpr_func(self, p):
         '''functionExpr : NAME '(' funcArgListOpt ')' '''
-        p[0] = AST(sympy.getattr(p[1])(*[x.sympy for x in p[3]]), self.nodim())
+        p[0] = AST(getattr(sympy,p[1])(*[x.sympy for x in p[3]]), self.nodim())
     def p_funcArgListOpt_zero(self, p):
         '''funcArgListOpt : empty'''
         p[0] = []
