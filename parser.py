@@ -55,6 +55,12 @@ class Choice:
         self.thenVar = thenVar
         self.elseVar = elseVar
         self.astUnit = unit
+    def __repr__(self):
+        return 'Choice(%s,%s,%s,%s)' % (repr(self.ifVar),
+                                        repr(self.thenVar),
+                                        repr(self.elseVar),
+                                        repr(self.unit),
+        )
 
 class AST:
     def __init__(self, sympyExpr, unit=None):
@@ -164,7 +170,23 @@ class Subsystem:
         self.time = None
         self.paramDefault = {}
         
+def strifyInstructions(ilist, ssa, indent=0):
+    myIndent = "   "*indent
+    ret = ""
+    for instruction in ilist:
+        if instruction is IfInstruction:
+            ret += myIndent + "if (%s) {\n" % instruction.ifVar
+            ret += strifyInstructions(instruction.thenInstructions,ssa,indent+1)
+            ret += myIndent + "} else {\n"
+            ret += strifyInstructions(instruction.elseInstructions,ssa,indent+1)
+            ret += myIndent + "}\n"
+            for choice in instruction.choiceInstructions:
+                ret += myIndent + "%s = %s;\n" % (choice, ssa[choice])
+        else:
+            ret += myIndent + "%s = %s;\n" % (instruction, ssa[instruction])
+    return ret
 
+        
 class Parser:
     def __init__(self, **kw):
         self.debug = kw.get('debug', 0),
@@ -199,7 +221,7 @@ class Parser:
         scope = self.currentScope()
         #if the var is an accum
         if var in subsystem.accums:
-            raise SyntaxError("Can't read from accumulation variable '%s'." % var)
+            raise XXXSyntaxError("Can't read from accumulation variable '%s'." % var)
         #if the var has a symbol already
         if scope.hasSymbol(var):
             symbol = scope.getSymbol(var)
@@ -245,29 +267,29 @@ class Parser:
             elif var in self.enumerations:
                 return self.enumerations[var]
             else:
-                raise SyntaxError("Variable '%s' used but not defined." % var)
+                raise XXXSyntaxError("Variable '%s' used but not defined." % var)
 
     def checkDeclarable(self, var):
         #if the variable is already type defined in this subsystem
         ss = self.currentSubsystem()
         if var in ss.inputs:
-            raise SyntaxError("'%s' already used as a shared variable in this subsystem." % var)
+            raise XXXSyntaxError("'%s' already used as a shared variable in this subsystem." % var)
         if var in ss.diffvars:
-            raise SyntaxError("'%s' already defined as a differential variable in this subsystem." % var)
+            raise XXXSyntaxError("'%s' already defined as a differential variable in this subsystem." % var)
         if var in ss.accums:
-            raise SyntaxError("'%s' already defined as an accumulation output for this subsystem." % var)
+            raise XXXSyntaxError("'%s' already defined as an accumulation output for this subsystem." % var)
         if var in ss.params:
-            raise SyntaxError("'%s' already defined as a parameter for this subsystem." % var)
+            raise XXXSyntaxError("'%s' already defined as a parameter for this subsystem." % var)
         if var in ss.outputs:
-            raise SyntaxError("'%s' already an output for this subsystem." % var)
+            raise XXXSyntaxError("'%s' already an output for this subsystem." % var)
         if var == ss.time:
-            raise SyntaxError("'%s' already used as the integration variable for this subsystem." % var) 
+            raise XXXSyntaxError("'%s' already used as the integration variable for this subsystem." % var) 
         #if the variable has already been assigned in this subsystem
         if ss.scope.hasSymbol(var) and ss.scope.getSymbol(var) in ss.ssa:
-            raise SyntaxError("'%s' has already been assigned to, it can't now be declared." % var)
+            raise XXXSyntaxError("'%s' has already been assigned to, it can't now be declared." % var)
         #if the variable is already unit defined in this subsystem
         if ss.scope.hasUnit(var):
-            raise SyntaxError("Units previously defined for '%s'" % var) 
+            raise XXXSyntaxError("Units previously defined for '%s'" % var) 
     
     def markProvides(self, varname, unitOpt):
         self.checkDeclarable(varname)
@@ -278,12 +300,12 @@ class Parser:
             junctionUnit = junction.rawUnit
             #if a unit was defined and that unit does not match the junction unit
             if unitOpt != None and unitOpt != junctionUnit:
-                raise SyntaxError("Provided units for '%s' don't match the shared units")
+                raise XXXSyntaxError("Provided units for '%s' don't match the shared units")
             unit = junctionUnit
         else:
             #if a unit was not provided
             if unitOpt == None:
-                raise SyntaxError("Must have a unit for provides variable '%s'." % varname)
+                raise XXXSyntaxError("Must have a unit for provides variable '%s'." % varname)
             unit = unitOpt
             junction = Junction(unit)
             #make a new junction with a unit
@@ -321,12 +343,12 @@ class Parser:
             if thenScope.hasUnit(var) and elseScope.hasUnit(var):
                 unit = thenScope.getUnit(var)
                 if unit != elseScope.hasUnit(var):
-                    raise SyntaxError("if condition for '%s' declares different units depending on branch." % var)
+                    raise XXXSyntaxError("if condition for '%s' declares different units depending on branch." % var)
                 self.currentScope().setUnit(var, unit)
             elif not thenScope.hasUnit(var) and not elseScope.hasUnit(var):
                 unit = None
             else:
-                raise SyntaxError("if condition for '%s' declares different units depending on branch." % var)
+                raise XXXSyntaxError("if condition for '%s' declares different units depending on branch." % var)
             
             choice = Choice(ifSymbol, thenScope.getSymbol(var), elseScope.getSymbol(var),
                             ASTUnit(unit, False))
@@ -350,12 +372,12 @@ class Parser:
         elif ast.astUnit.rawUnit == castRaw:
             return retval
         else:
-            raise SyntaxError("Can't cast "+str(ast.astUnit)+" to unit of "+str(castRaw)+")")
+            raise XXXSyntaxError("Can't cast "+str(ast.astUnit)+" to unit of "+str(castRaw)+")")
 
     def checkExactUnits(self, lunit, runit):
         if lunit.isNull() or runit.isNull():
             if lunit.explicit or runit.explicit:
-                raise SyntaxError("Explicit units cannot combine with null units!")
+                raise XXXSyntaxError("Explicit units cannot combine with null units!")
             else:
                 return ASTUnit.null()
         else:
@@ -365,14 +387,14 @@ class Parser:
                 return ASTUnit(lunit.rawUnit, resultIsExplicit)
             else:
                 if resultIsExplicit:
-                    raise SyntaxError("Units don't match, maybe you need a conversion?")
+                    raise XXXSyntaxError("Units don't match, maybe you need a conversion?")
                 else:
                     return ASTUnit.null()
     def convertUnitTo(self, expr, newUnit):
         if expr.astUnit.isNull():
-            raise SyntaxError("Can't convert a null unit!")
+            raise XXXSyntaxError("Can't convert a null unit!")
         elif not expr.astUnit.rawUnit.isCompatibleWith(newUnit):
-            raise SyntaxError("Incompatible unit conversion requested.")
+            raise XXXSyntaxError("Incompatible unit conversion requested.")
         else:
             factor = expr.astUnit.rawUnit.convertTo(newUnit)
             return AST(sympy.Mul(factor,expr.sympy), ASTUnit(newUnit, explicit=False))
@@ -540,13 +562,16 @@ class Parser:
 
     def p_subSystemDefinition(self, p):
         '''subSystemDefinition : subSystemBegin subSystemStatementsOpt '}' '''
-        p[0] = self.subsystemStack.pop()
+        thisSubsystem = self.subsystemStack.pop()
+        #print strifyInstructions(thisSubsystem.scope.instructions, thisSubsystem.ssa)
+        p[0] = thisSubsystem
+
     def p_subSystemBegin(self, p):
         '''subSystemBegin : SUBSYSTEM NAME '{' '''
         thisName = p[2]
         if self.subsystemStack:
             thisName = self.currentSubsystem().name + "." + thisName
-        thisSubsystem = Subsystem(thisName)            
+        thisSubsystem = Subsystem(thisName)
         self.subsystemStack.append(Subsystem(thisName))
         self.scopeStack.append(self.currentSubsystem().scope)
         
@@ -562,6 +587,7 @@ class Parser:
 
     def p_subSystemStatement_subSystem(self, p):
         '''subSystemStatement : subSystemDefinition'''
+        print self.subsystemStack
         pass
 
     def p_subSystemStatement_accum(self, p):
@@ -616,7 +642,7 @@ class Parser:
                               |          DIFFVAR var unitDef ';' 
         '''
         if self.timeUnit is None:
-            raise SyntaxError("Must include an 'integrate' statement before declaring subsystems.")
+            raise XXXSyntaxError("Must include an 'integrate' statement before declaring subsystems.")
         #if this is a provides
         if p[1] == "provides":
             (var, unit) = (p[3],p[4])
@@ -1036,6 +1062,13 @@ class Parser:
         '''empty :'''
         pass
 
+    def p_statementRecovery(self,p):
+        '''subSystemStatement : error ';' '''
+        print "moving on from syntax error on line number "+str(self.lexer.lineno)
+    def p_subsystemRecovery(self,p):
+        '''subSystemDefinition : SUBSYSTEM NAME '{' error '}' '''
+        print "moving on from syntax error on line number "+str(self.lexer.lineno)
+    
     def p_error(self,p):
         if p:
             print "SyntaxError on line number "+str(self.lexer.lineno)+" at token", p.type, p.value
