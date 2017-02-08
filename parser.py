@@ -293,6 +293,8 @@ class Parser:
             #see if this is a shared var
             (exists, junction) = self.searchForJunction(var)
             if exists:
+                port = Port(subsystem, var, junction.rawUnit)
+                encapsulation.inputs[var] = port
                 #make a symbol for this guy, mark it as an input
                 symbol = Symbol(var)
                 subsystem.scope.setSymbol(var, symbol)
@@ -692,6 +694,7 @@ class Parser:
     def p_subSystemStatement_accum(self, p):
         '''subSystemStatement : PROVIDES ACCUM var unitOpt accumDefOpt ';' '''
         junction = self.markProvides(p[3],p[4])
+        self.currentEncapsulation().accums[p[3]] = Port(self.currentSubsystem(),p[3],junction.rawUnit)
         #mark that junction as an accum junction
         #FIXME
         #mark the variable as an accum
@@ -717,7 +720,8 @@ class Parser:
         #if this is a provides
         if p[1] == "provides":
             (var, unit, assignOpt) = (p[3],p[4],p[5])
-            self.markProvides(var,unit)
+            junction = self.markProvides(var,unit)
+            self.currentEncapsulation().assigns[var] = Port(self.currentSubsystem(), var, junction.rawUnit)
         else:
             (var, unit, assignOpt) = (p[2],p[3],p[4])
             self.checkDeclarable(var)
@@ -743,7 +747,8 @@ class Parser:
         #if this is a provides
         if p[1] == "provides":
             (var, unit) = (p[3],p[4])
-            self.markProvides(var,unit)
+            junction = self.markProvides(var,unit)
+            self.currentEncapsulation().diffvars[var] = Port(self.currentSubsystem(), var, junction.rawUnit)
         else:
             (var, unit) = (p[2],p[3])
             self.checkDeclarable(var)
@@ -757,7 +762,8 @@ class Parser:
 
     def p_subSystemStatement_output(self, p):
         '''subSystemStatement : PROVIDES var unitOpt assignOpt ';' '''
-        self.markProvides(p[2],p[3])
+        junction = self.markProvides(p[2],p[3])
+        self.currentEncapsulation().assigns[p[2]] = Port(self.currentSubsystem(),p[2],junction.rawUnit)
         #if there's a definition, process it.
         if p[4] != None:
             self.processAssignment(p[2],'=',p[4]) 
