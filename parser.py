@@ -68,6 +68,8 @@ class Choice:
                                         repr(self.elseVar),
                                         repr(self.astUnit),
         )
+    def dependencies(self):
+        return set([self.ifVar, self.thenVar, self.elseVar])
 
 class AST:
     def __init__(self, sympyExpr, unit=None):
@@ -75,6 +77,8 @@ class AST:
         self.astUnit = unit
     def __repr__(self):
         return 'AST(sympify(' + repr(self.sympy) +'), '+ repr(self.astUnit) +')'
+    def dependencies(self):
+        return self.sympy.atoms(Symbol)
 
 def textToAST(text, unit):
     return AST(sympy.sympify(text), unit)
@@ -149,26 +153,41 @@ class Scope:
     def addInstruction(self, inst):
         self.instructions.append(inst)
 
-class SharedScope(Scope):
-    def __init__(self):
-        Scope.__init__(self, None)
+class Port:
+    def __init__(self, subsystem, name, unit):
+        self.subsystem = subsystem
+        self.name = name
+        self.rawUnit = unit
+        
+class Junction:
+    def __init__(self,unit):
+        self.rawUnit = unit
+
+class Encapsulation:
+    def __init__(self, subsystem=None):
+        self.subsystem = subsystem
+        self.children = {}
         self.junctions = {}
+        self.inputs = {}
+        self.assigns = {}
+        self.accums = {}
+        self.diffvars = {}
     def hasJunction(self, name):
         return name in self.junctions
     def getJunction(self, name):
         return self.junctions[name]
     def setJunction(self, name, junction):
         self.junctions[name] = junction
-
-class Junction:
-    def __init__(self,unit):
-        self.rawUnit = unit
-    
+    def addChild(self, name, encapsulation):
+        if name in self.children:
+            raise MultipleAssignmentDisallowed(name)
+        self.children[name] = encapsulation
+        
 class Subsystem:
     def __init__(self, name):
         self.name = name
         self.ssa = SSA()
-        self.scope = SharedScope()
+        self.scope = Scope()
         self.inputs = set()
         self.outputs = set()
         self.diffvars = set()
@@ -176,7 +195,24 @@ class Subsystem:
         self.params = set()
         self.time = None
         self.paramDefault = {}
-        
+
+    def getAllDependencies(self, target):
+        try:
+            iter(target)
+            iterableTarget = target
+        except TypeError:
+            iterableTarget = [target]
+        front = set(iterableTarget)
+        dependencies = set()
+        while front:
+            dependencies |= front
+            newFront = set()
+            for symbol in front:
+                if symbol in self.ssa:
+                    newFront |= self.ssa[symbol].dependencies()
+            front = newFront-dependencies
+        return dependencies
+            
 def strifyInstructions(ilist, ssa, indent=0):
     myIndent = "   "*indent
     ret = ""
@@ -205,17 +241,19 @@ class Parser:
                                 start=self.start,
         )
         self.si = units.Si()
-        self.subsystemStack = []
-        self.scopeStack = [SharedScope()]
+        self.scopeStack = []
+        self.encapsulationStack = [Encapsulation()]
         self.timeVar = None
         self.timeUnit = None
         self.enumerations = {}
         self.tempCount = 0
         
     def currentSubsystem(self):
-        return self.subsystemStack[-1]
+        return self.currentEncapsulation().subsystem
     def currentScope(self):
         return self.scopeStack[-1]
+    def currentEncapsulation(self):
+        return self.encapsulationStack[-1]
     def pushScope(self):
         self.scopeStack[-1] = self.scopeStack[-1].makeChild()
         return self.scopeStack[-1]
@@ -224,6 +262,7 @@ class Parser:
         self.scopeStack[-1] = self.scopeStack[-1].getParent()
         return retval
     def readAccessVar(self, var):
+        encapsulation = self.currentEncapsulation()
         subsystem = self.currentSubsystem()
         scope = self.currentScope()
         #if the var is an accum
@@ -369,17 +408,17 @@ class Parser:
             unit = unitOpt
             junction = Junction(unit)
             #make a new junction with a unit
-            self.currentSubsystem().scope.junction[varname] = junction
+            self.currentEncapsulation().setJunction(varname, junction)
         self.currentScope().setUnit(varname, unit)
         self.currentSubsystem().outputs.add(varname)
         #return the junction
         return junction
 
     def searchForJunction(self, name):
-        assert(len(self.subsystemStack) >= 1)
-        for ii in range(len(self.scopeStack)-1,0,-1):
-            if self.scopeStack[ii].hasJunction(name):
-                return (True, self.scopeStack[ii].getJunction(name))
+        assert(len(self.encapsulationStack) >= 1)
+        for ii in range(len(self.encapsulationStack)-1,0,-1):
+            if self.encapsulationStack[ii].hasJunction(name):
+                return (True, self.encapsulationStack[ii].getJunction(name))
         return (False, None)
 
     def newTempVar(self):
@@ -611,7 +650,7 @@ class Parser:
     def p_sharedStatement_unit(self, p):
         '''sharedStatement : SHARED var unitDef ';'
         '''
-        self.currentScope().setJunction(p[2], Junction(p[3]))
+        self.currentEncapsulation().setJunction(p[2], Junction(p[3]))
 
     def p_nameList_term(self, p):
         '''nameList : NAME'''
@@ -623,17 +662,16 @@ class Parser:
     def p_subSystemDefinition(self, p):
         '''subSystemDefinition : subSystemBegin subSystemStatementsOpt '}' '''
         self.scopeStack.pop()
-        thisSubsystem = self.subsystemStack.pop()
+        thisEncapsulation = self.encapsulationStack.pop()
+        thisSubsystem = thisEncapsulation.subsystem
+        self.currentEncapsulation().addChild(thisSubsystem.name,thisEncapsulation)
         print strifyInstructions(thisSubsystem.scope.instructions, thisSubsystem.ssa)
         p[0] = thisSubsystem
 
     def p_subSystemBegin(self, p):
         '''subSystemBegin : SUBSYSTEM NAME '{' '''
         thisName = p[2]
-        if self.subsystemStack:
-            thisName = self.currentSubsystem().name + "." + thisName
-        thisSubsystem = Subsystem(thisName)
-        self.subsystemStack.append(Subsystem(thisName))
+        self.encapsulationStack.append(Encapsulation(Subsystem(thisName)))
         self.scopeStack.append(self.currentSubsystem().scope)
         
     def p_subSystemStatementsOpt(self, p):
