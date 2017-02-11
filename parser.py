@@ -270,16 +270,8 @@ class Parser:
             raise XXXSyntaxError("Can't read from accumulation variable '%s'." % var)
         #if the var has a symbol already
         if scope.hasSymbol(var):
-            symbol = scope.getSymbol(var)
-            # if this is a parameter that has never been read before
-            #FIXME
-            if 0:#var in subsystem.params and var not in subsystem.paramDefault:
-                #mark this parameter as frozen
-                #subsystem.paramDefault[var] = symbol
-                #symbol = Symbol(var)
-                #subsystem.
-                pass
             #get the symbol
+            symbol = scope.getSymbol(var)
             #if this symbol has a unit defined
             if scope.hasUnit(var):
                 rawUnit = scope.getUnit(var)
@@ -344,6 +336,7 @@ class Parser:
                     raise XXXSyntaxError("'%s' used before assignment."%var)
             else:
                 lhs = self.readAccessVar(var)
+
             if operand == '+=' or operand == '-=':
                 if operand == '-=':
                     rhs = AST(sympy.Mul(sympy.Integer(-1),rhs.sympy, rhs.astUnit))
@@ -439,7 +432,9 @@ class Parser:
         ifSymbol = symbol
         
         #iterate over local symbols
-        for var in order(set(thenScope.symbols.keys()) & set(elseScope.symbols.keys())):
+        for var in order(set(thenScope.symbols.keys()) | set(elseScope.symbols.keys())):
+            if not thenScope.hasSymbol(var) or not elseScope.hasSymbol(var):
+                continue
             #make sure the units match
             if thenScope.hasUnit(var) and elseScope.hasUnit(var):
                 unit = thenScope.getUnit(var)
