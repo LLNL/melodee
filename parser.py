@@ -194,7 +194,7 @@ class Subsystem:
         self.accums = set()
         self.params = set()
         self.time = None
-        self.paramDefault = {}
+        self.frozen = set()
 
     def getAllDependencies(self, target):
         try:
@@ -356,13 +356,22 @@ class Parser:
             #print scope.getUnit(var)
             #print rhs
             rhs = self.checkExplicitCast(scope.getUnit(var), rhs)
-
+        
         #ok, we're ready to do the assignment!
+        if var in subsystem.frozen:
+            XXXSyntaxError('"%s" cannot be assigned once it has been read.' % var)
         symbol = Symbol(var)
         subsystem.ssa[symbol] = rhs
         scope.addInstruction(symbol)
         scope.setSymbol(var, symbol)
-            
+
+        #parameter checking code.
+        #FIXME
+        nameDepend = set([symbol.name for symbol in rhs.dependencies()])
+        newlyReadParams = (subsystem.params | nameDepend) - subsystem.frozen
+        newlyReadParams -= set([var])
+        subsystem.frozen |= newlyReadParams
+        
     def checkDeclarable(self, var):
         #if the variable is already type defined in this subsystem
         ss = self.currentSubsystem()
@@ -446,6 +455,8 @@ class Parser:
             else:
                 raise XXXSyntaxError("if condition for '%s' declares different units depending on branch." % var)
             
+            if var in self.frozen:
+                XXXSyntaxError("Due to '%s' being used in an if condition, I don't know what it's default value should be." % var)
             choice = Choice(ifSymbol, thenScope.getSymbol(var), elseScope.getSymbol(var),
                             ASTUnit(unit, False))
             symbol = Symbol(var)
