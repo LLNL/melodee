@@ -196,8 +196,7 @@ class Encapsulation:
         self.children[name] = encapsulation
         
 class Subsystem:
-    def __init__(self, name):
-        self.name = name
+    def __init__(self):
         self.ssa = SSA()
         self.scope = Scope()
         self.inputs = set()
@@ -684,15 +683,16 @@ class Parser:
         self.scopeStack.pop()
         thisEncapsulation = self.encapsulationStack.pop()
         thisSubsystem = thisEncapsulation.subsystem
-        self.currentEncapsulation().addChild(thisSubsystem.name,thisEncapsulation)
+        self.currentEncapsulation().addChild(p[1],thisEncapsulation)
         print strifyInstructions(thisSubsystem.scope.instructions, thisSubsystem.ssa)
         p[0] = thisSubsystem
 
     def p_subSystemBegin(self, p):
         '''subSystemBegin : SUBSYSTEM NAME '{' '''
         thisName = p[2]
-        self.encapsulationStack.append(Encapsulation(Subsystem(thisName)))
+        self.encapsulationStack.append(Encapsulation(Subsystem()))
         self.scopeStack.append(self.currentSubsystem().scope)
+        p[0] = thisName
         
     def p_subSystemStatementsOpt(self, p):
         '''subSystemStatementsOpt : subSystemStatement subSystemStatementsOpt
@@ -1205,7 +1205,7 @@ and && or || not ! 0 2.0 .3 40. 5e+6 if myID */* bljsadfj */ */
     print p.parse("uA/uF")
 
     p = Parser(start="realExpr")
-    p.p_subSystemBegin("testing")
+    p.p_subSystemBegin([None, 'subsystem', "testing", '{'])
     p.currentScope().setSymbol("a", Symbol("a"))
     p.currentScope().setSymbol("b", Symbol("b"))
     p.currentScope().setSymbol("c", Symbol("c"))
