@@ -554,6 +554,8 @@ class Parser:
         "integrate" : "INTEGRATE",
 
         "use" : "USE",
+        "export" : "EXPORT",
+        "as" : "AS",
         #"from" : "FROM",
 
         #"unit" : "UNIT",
@@ -575,8 +577,6 @@ class Parser:
         "NUMBER",
         "NAME",
         "ONE",
-        "PLUSPERCENTEQ",
-        "MINUSPERCENTEQ",
     ) + tuple(reserved.values())
 
     literals = "(){}<>!;?:+-/*^=.,~"
@@ -612,8 +612,6 @@ class Parser:
     t_TIMESEQ = r'\*='
     t_DIVIDEEQ = r'/='
     t_EXPONEQ = r'^='
-    t_PLUSPERCENTEQ = r'\+%='
-    t_MINUSPERCENTEQ = r'-%='
     
     t_ignore_CPP_COMMENT = r'//.*?\n'
     t_ignore_C_COMMENT = r'/\*.*?\*/'
@@ -630,7 +628,7 @@ class Parser:
         ('left', '+', '-'),
         ('left', '*', '/'),
         #('right', 'ANNOTATE_UNIT'),
-        ('right', 'UMINUS'),
+        #('right', 'UMINUS'),
         ('left', '^'),
        )
 
@@ -849,66 +847,45 @@ class Parser:
     def p_subSystemStatement_use(self, p):
         '''subSystemStatement : useStatement'''
         pass
-    def p_useStatement(self, p):
-        '''useStatement : USE useList '{' useBlockStatementList '}' '''
+    def p_useStatement_noBlock(self, p):
+        '''useStatement : useEncapsulationSpec ';' '''
         pass
-    def p_useList_default(self, p):
-        '''useList : speccedName'''
-        p[0] = (p[1],set())
-    def p_useList_subtract(self, p):
-        '''useList : useList '-' speccedName'''
-        p[0] = (p[1][0], p[1][1] | set([p[2]]))
+    def p_useStatement_withBlock(self, p):
+        '''useStatement : useEncapsulationSpec '{' useBlockStatementListOpt '}' '''
+        pass
+    def p_useEncapsulationSpec_simpleSamename(self, p):
+        '''useEncapsulationSpec : USE NAME useRemoveListOpt'''
+        pass
+    def p_useEncapsulationSpec_simpleRenamed(self, p):
+        '''useEncapsulationSpec : USE NAME useRemoveListOpt AS NAME'''
+        pass
+    def p_useEncapsulationSpec_complex(self, p):
+        '''useEncapsulationSpec : USE NAME '.' speccedName useRemoveListOpt AS NAME '''
+        pass
+    def p_useRemoveListOpt_empty(self, p):
+        '''useRemoveListOpt : empty'''
+        p[0] = []
+    def p_useRemoveListOpt_recurse(self, p):
+        '''useRemoveListOpt : useRemoveListOpt '-' '.' speccedName '''
+        p[0] = p[1] + [p[4]]
     def p_speccedName_default(self, p):
         '''speccedName : NAME'''
-        p[0] = p[1]
+        p[0] = [p[1]]
     def p_specceedName_specified(self, p):
         '''speccedName : speccedName '.' NAME'''
-        p[0] = p[1] + '.' + p[2]
-    def p_useBlockStatementList_single(self, p):
-        '''useBlockStatementList : useBlockStatement'''
-        pass
-    def p_useBlockStatementList_mult(self, p):
-        '''useBlockStatementList : useBlockStatementList useBlockStatement'''
-        pass
-    def p_useBlockStatement_explicitBindLeft(self, p):
-        '''useBlockStatement : NAME '~' '.' speccedName ';' '''
-        pass
-    def p_useBlockStatement_explicitBindRight(self,p):
-        '''useBlockStatement : '.' speccedName '~' NAME ';' '''
-        pass
-    def p_useBlockStatement_simpleBind(self,p):
-        '''useBlockStatement : '~' '.' NAME ';' '''
-        pass
-    def p_useBlockStatement_implicitBind(self,p):
-        '''useBlockStatement : '~' '.' ';' '''
-        pass
-    def p_useBlockStatement_parameterSet(self, p):
-        '''useBlockStatement : '.' speccedName useOp useExpr ';' '''
-        pass
-    def p_useOp(self, p):
-        '''useOp : '='
-                 | PLUSEQ
-                 | MINUSEQ
-                 | PLUSPERCENTEQ
-                 | MINUSPERCENTEQ
-                 | TIMESEQ
-                 | DIVIDEEQ
-        '''
-        pass
-    def p_useExpr_literal(self,p):
-        '''useExpr : numberLiteralPlusOpt '''
-        pass
-    def p_useExpr_boolop(self,p):
-        '''useExpr : useExpr '+' useExpr
-                   | useExpr '-' useExpr
-                   | useExpr '*' useExpr
-                   | useExpr '/' useExpr
-                   | useExpr '^' useExpr
-        '''
-        pass
-    def p_useExpr_uminus(self,p):
-        '''useExpr : '-' useExpr %prec UMINUS'''
-        pass
+        p[0] = p[1] + [p[2]]
+    def p_useBlockStatementListOpt_empty(self, p):
+        '''useBlockStatementListOpt : empty'''
+        p[0] = []
+    def p_useBlockStatementListOpt_statement(self, p):
+        '''useBlockStatementListOpt : useBlockStatementListOpt useBlockStatement'''
+        p[0] = p[1] + [p[2]]
+    def p_useBlockStatement_exportSimple(self, p):
+        '''useBlockStatement : EXPORT speccedName ';' '''
+        p[0] = (p[2], p[2][-1])
+    def p_useBlockStatement_exportComplex(self, p):
+        '''useBlockStatement : EXPORT speccedName AS NAME ';' '''
+        p[0] = (p[2], p[4])
 
     #def p_unitDefBar(self, p):
     #    '''unitDefBar : unitExpr '|' '''
