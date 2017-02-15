@@ -662,10 +662,10 @@ class Parser:
 
     def p_nameList_term(self, p):
         '''nameList : NAME'''
-        pass
+        p[0] = [p[1]]
     def p_nameList_shift(self, p):
         '''nameList : NAME ',' nameList'''
-        pass
+        p[0] = [p[1]] + p[3]
 
     def p_subSystemDefinition(self, p):
         '''subSystemDefinition : subSystemBegin subSystemStatementsOpt '}' '''
