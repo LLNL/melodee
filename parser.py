@@ -154,14 +154,26 @@ class Scope:
         self.instructions.append(inst)
 
 class Port:
-    def __init__(self, subsystem, name, unit):
-        self.subsystem = subsystem
-        self.name = name
+    def __init__(self, unit):
         self.rawUnit = unit
         
 class Junction:
     def __init__(self,unit):
         self.rawUnit = unit
+
+class Connections:
+    def __init__(self):
+        self.junctionFromPort = {}
+        self.portsFromJunction = {}
+    def makeJunction(self,unit):
+        junction = Junction(unit)
+        self.portsFromJunction[junction] = set()
+        return junction
+    def makePort(self, junction):
+        port = Port(junction.rawUnit)
+        self.junctionFromPort[port] = junction
+        self.portsFromJunction[junction].add(port)
+        return port
 
 class Encapsulation:
     def __init__(self, subsystem=None):
@@ -247,6 +259,7 @@ class Parser:
         self.timeUnit = None
         self.enumerations = {}
         self.tempCount = 0
+        self.connections = Connections()
         
     def currentSubsystem(self):
         return self.currentEncapsulation().subsystem
@@ -285,7 +298,7 @@ class Parser:
             #see if this is a shared var
             (exists, junction) = self.searchForJunction(var)
             if exists:
-                port = Port(subsystem, var, junction.rawUnit)
+                port = self.connections.makePort(junction)
                 encapsulation.inputs[var] = port
                 #make a symbol for this guy, mark it as an input
                 symbol = Symbol(var)
@@ -410,7 +423,7 @@ class Parser:
             if unitOpt == None:
                 raise XXXSyntaxError("Must have a unit for provides variable '%s'." % varname)
             unit = unitOpt
-            junction = Junction(unit)
+            junction = self.connections.makeJunction(unit)
             #make a new junction with a unit
             self.currentEncapsulation().setJunction(varname, junction)
         self.currentScope().setUnit(varname, unit)
@@ -656,7 +669,8 @@ class Parser:
     def p_sharedStatement_unit(self, p):
         '''sharedStatement : SHARED var unitDef ';'
         '''
-        self.currentEncapsulation().setJunction(p[2], Junction(p[3]))
+        junction = self.connections.makeJunction(p[3])
+        self.currentEncapsulation().setJunction(p[2], junction)
 
     def p_nameList_term(self, p):
         '''nameList : NAME'''
@@ -698,7 +712,7 @@ class Parser:
     def p_subSystemStatement_accum(self, p):
         '''subSystemStatement : PROVIDES ACCUM var unitOpt accumDefOpt ';' '''
         junction = self.markProvides(p[3],p[4])
-        self.currentEncapsulation().accums[p[3]] = Port(self.currentSubsystem(),p[3],junction.rawUnit)
+        self.currentEncapsulation().accums[p[3]] = self.connections.makePort(junction)
         #mark that junction as an accum junction
         #FIXME
         #mark the variable as an accum
@@ -725,7 +739,7 @@ class Parser:
         if p[1] == "provides":
             (var, unit, assignOpt) = (p[3],p[4],p[5])
             junction = self.markProvides(var,unit)
-            self.currentEncapsulation().assigns[var] = Port(self.currentSubsystem(), var, junction.rawUnit)
+            self.currentEncapsulation().assigns[var] = self.connections.makePort(junction)
         else:
             (var, unit, assignOpt) = (p[2],p[3],p[4])
             self.checkDeclarable(var)
@@ -752,7 +766,7 @@ class Parser:
         if p[1] == "provides":
             (var, unit) = (p[3],p[4])
             junction = self.markProvides(var,unit)
-            self.currentEncapsulation().diffvars[var] = Port(self.currentSubsystem(), var, junction.rawUnit)
+            self.currentEncapsulation().diffvars[var] = self.connections.makePort(junction)
         else:
             (var, unit) = (p[2],p[3])
             self.checkDeclarable(var)
@@ -767,7 +781,7 @@ class Parser:
     def p_subSystemStatement_output(self, p):
         '''subSystemStatement : PROVIDES var unitOpt assignOpt ';' '''
         junction = self.markProvides(p[2],p[3])
-        self.currentEncapsulation().assigns[p[2]] = Port(self.currentSubsystem(),p[2],junction.rawUnit)
+        self.currentEncapsulation().assigns[p[2]] = self.connections.makePort(junction)
         #if there's a definition, process it.
         if p[4] != None:
             self.processAssignment(p[2],'=',p[4]) 
