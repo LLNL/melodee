@@ -478,7 +478,14 @@ class Parser:
 
         iif = IfInstruction(ifSymbol,thenScope.instructions,elseScope.instructions,choiceInstructions)
         self.currentScope().addInstruction(iif)
-        
+    def processUseStatement(self, childName, encap, removeList, exportList):
+        newEncap = self.copyEncapsulation(encap)
+        for item in removeList:
+            self.removeEncap(newEncap, item)
+        for item in exportList:
+            self.processExport(newEncap, item)
+        self.currentEncapsulation().children[childName] = newEncap
+    
     def nodim(self):
         return ASTUnit(self.si.get("1"), False)
     def boolean(self):
@@ -863,19 +870,31 @@ class Parser:
         pass
     def p_useStatement_noBlock(self, p):
         '''useStatement : useEncapsulationSpec ';' '''
-        pass
+        (name, encap, removeList) = p[1]
+        exportList = []
+        self.processUseStatement(name, encap, removeList, exportList)
     def p_useStatement_withBlock(self, p):
         '''useStatement : useEncapsulationSpec '{' useBlockStatementListOpt '}' '''
-        pass
+        (name, encap, removeList) = p[1]
+        exportList = p[3]
+        self.processUseStatement(name, encap, removeList, exportList)
     def p_useEncapsulationSpec_simpleSamename(self, p):
         '''useEncapsulationSpec : USE NAME useRemoveListOpt'''
-        pass
+        loookupName = p[2]
+        useName = lookupName
+        p[0] = (useName, self.encapsulationStack[0].children[lookupName], p[3])
     def p_useEncapsulationSpec_simpleRenamed(self, p):
         '''useEncapsulationSpec : USE NAME useRemoveListOpt AS NAME'''
-        pass
+        lookupName = p[2]
+        useName = p[5]
+        p[0] = (useName, self.encapsulationStack[0].children[lookupName], p[3])
     def p_useEncapsulationSpec_complex(self, p):
         '''useEncapsulationSpec : USE NAME '.' speccedName useRemoveListOpt AS NAME '''
-        pass
+        useName = p[7]
+        retEncap = self.encapsulationStack[0].children[p[2]]
+        for name in p[4]:
+            retEncap = retEncap.children[name]
+        p[0] = (useName, retEncap, p[5])
     def p_useRemoveListOpt_empty(self, p):
         '''useRemoveListOpt : empty'''
         p[0] = []
