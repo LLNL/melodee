@@ -494,7 +494,7 @@ class Parser:
 
     def searchForJunction(self, name):
         assert(len(self.encapsulationStack) >= 1)
-        for ii in range(len(self.encapsulationStack)-1,0,-1):
+        for ii in range(len(self.encapsulationStack)-1,-1,-1):
             if self.encapsulationStack[ii].hasJunction(name):
                 return (True, self.encapsulationStack[ii].getJunction(name))
         return (False, None)
@@ -1333,11 +1333,11 @@ and && or || not ! 0 2.0 .3 40. 5e+6 if myID */* bljsadfj */ */
     HH = '''
 integrate time {ms};
 
-subsystem HH {
 shared V {mV};
+subsystem HH {
    shared Iion {uA/cm^2};
    provides E_R {mV} = -75;
-   provides E_Na {mV} = (E_R+115{mV});
+   shared E_Na {mV};
    subsystem leakage_current {
       E_L {mV} = (E_R+10.613{mV});
       param g_L {mS/cm^2} = 0.3;
@@ -1386,15 +1386,15 @@ shared V {mV};
    subsystem membrane {
       provides diffvar V {mV};
       Cm {uF/cm^2} = 1;
+      provides E_Na {mV} = (E_R+115{mV});
       V.init = -75;
       V.diff = -Iion/Cm;
    }
 }
 
 
-subsystem newINa {
-shared V {mV};
 shared E_Na {mV};
+subsystem newINa {
   diffvar m {1};
   diffvar j {1};
   diffvar h {1};
@@ -1427,12 +1427,14 @@ shared E_Na {mV};
 
 subsystem modifiedModel {
   use HH - .sodium_channel {
-    export V;
+    //export V;
     export Iion;
+    export E_Na;
   }
   use newINa as INa {
-    export V;
+    //export V;
     export i_Natot as Iion;
+    //export E_Na;
   } 
 }
 '''
