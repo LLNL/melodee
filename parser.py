@@ -163,18 +163,35 @@ class Junction:
 
 class Connections:
     def __init__(self):
-        self.junctionFromPort = {}
-        self.portsFromJunction = {}
+        self._junctionFromPort = {}
+        self._portsFromJunction = {}
     def makeJunction(self,unit):
         junction = Junction(unit)
-        self.portsFromJunction[junction] = set()
+        self._portsFromJunction[junction] = set()
         return junction
     def makePort(self, junction):
         port = Port(junction.rawUnit)
-        self.junctionFromPort[port] = junction
-        self.portsFromJunction[junction].add(port)
+        self._junctionFromPort[port] = junction
+        self._portsFromJunction[junction].add(port)
         return port
-
+    def junctionFromPort(self, port):
+        return self._junctionFromPort[port]
+    def portsFromJunction(self, junction):
+        return set(self._portsFromJunction[junction])
+    def removePort(self, port):
+        self._portsFromJunction[self._junctionFromPort[port]].remove(port)
+        del self._junctionFromPort[port]
+    def removeJunction(self, junction):
+        assert(not self._portsFromJunction[junction])
+        del self._portsFromJunction[junction]
+    def substituteJunction(self, matchJunction, replacementJunction):
+        if matchJunction != replacementJunction:
+            ports = self._portsFromJunction[matchJunction]
+            for port in ports:
+                self._junctionFromPort[port] = replacementJunction
+            self._portsFromJunction[replacementJunction] |= ports
+            self._portsFromJunction[matchJunction] = set()
+    
 class Encapsulation:
     def __init__(self, subsystem=None):
         self.subsystem = subsystem
@@ -194,6 +211,51 @@ class Encapsulation:
         if name in self.children:
             raise MultipleAssignmentDisallowed(name)
         self.children[name] = encapsulation
+    def copy(self, connections, newJuncFromOld=None):
+        if newJuncFromOld == None:
+            newJuncFromOld = {}
+        other = Encapsulation()
+        other.subsystem = self.subsystem
+        for (name,encap) in self.children.items():
+            other.children[name] = encap.copy(connections, newJuncFromOld)
+        oldPorts = self.allLocalPorts()
+        newPortFromOld = {}
+        for oldPort in oldPorts:
+            oldJunction = connections.junctionFromPort(oldPort)
+            if oldJunction not in newJuncFromOld:
+                newJuncFromOld[oldJunction] = connections.makeJunction(oldJunction.rawUnit)
+            newJunction = newJuncFromOld[oldJunction]
+            newPortFromOld[oldPort] = connections.makePort(newJunction)
+
+        for (name,oldJunction) in self.junctions.items():            
+            other.junctions[name] = newJuncFromOld[oldJunction]
+        for (name,oldPort) in self.inputs.items():
+            other.inputs[name] = newPortFromOld[oldPort]
+        for (name,oldPort) in self.assigns.items():
+            other.assigns[name] = newPortFromOld[oldPort]
+        for (name,oldPort) in self.accums.items():
+            other.accums[name] = newPortFromOld[oldPort]
+        for (name,oldPort) in self.diffvars.items():
+            other.diffvars[name] = newPortFromOld[oldPort]
+        return other
+    def allLocalPorts(self):
+        return (self.inputs.values()
+                +self.assigns.values()
+                +self.accums.values()
+                +self.diffvars.values()
+                )
+    def removeChild(self, name, connections):
+        child = self.children[name]
+        child.removeConnections(connections)
+        del self.children[name]
+    def removeConnections(self, connections):
+        for child in self.children.values():
+            child.removeConnections(connections)
+        for port in self.allLocalPorts():
+            connections.removePort(port)
+        for junction in self.junctions.values():
+            connections.removeJunction(junction)
+        
         
 class Subsystem:
     def __init__(self):
@@ -288,7 +350,7 @@ class Parser:
             if scope.hasUnit(var):
                 rawUnit = scope.getUnit(var)
             elif symbol in subsystem.ssa:
-                rawUnit = subsystem.ssa[symbol].astunit.rawUnit
+                rawUnit = subsystem.ssa[symbol].astUnit.rawUnit
             else:
                 rawUnit = None
             return AST(symbol, ASTUnit(rawUnit, explicit=False))
@@ -478,14 +540,36 @@ class Parser:
 
         iif = IfInstruction(ifSymbol,thenScope.instructions,elseScope.instructions,choiceInstructions)
         self.currentScope().addInstruction(iif)
-    def processUseStatement(self, childName, encap, removeList, exportList):
-        newEncap = self.copyEncapsulation(encap)
-        for item in removeList:
-            self.removeEncap(newEncap, item)
-        for item in exportList:
-            self.processExport(newEncap, item)
-        self.currentEncapsulation().children[childName] = newEncap
+
+    def lookupEncapsulation(self, name):
+        assert(len(self.encapsulationStack) >= 1)
+        for ii in range(len(self.encapsulationStack)-1,-1,-1):
+            if name in self.encapsulationStack[ii].children:
+                return self.encapsulationStack[ii].children[name]
+        raise NoEncapsulationError(name)
     
+    def processUseStatement(self, childName, encap, removeList, exportList):
+        newEncap = encap.copy(self.connections)
+        for removeItem in removeList:
+            removeEncap = encap
+            while len(removeItem) > 1:
+                removeEncap = removeEncap.children[removeItem[0]]
+                removeItem = removeItem[1:]
+            removeEncap.removeChild(removeItem[0], self.connections)
+        for item in exportList:
+            (speccedName, exportName) = item
+            exportEncap = newEncap
+            while len(speccedName) > 1:
+                exportEncap = exportEncap.children[speccedName[0]]
+                speccedName = speccedName[1:]
+            newJunction = exportEncap.junctions[speccedName[0]]
+            (exists, oldJunction) = self.searchForJunction(exportName)
+            if not exists:
+                self.currentEncapsulation().setJunction(exportName, newJunction)
+            else:
+                self.connections.substituteJunction(newJunction,oldJunction)# FIXME
+        self.currentEncapsulation().addChild(childName, newEncap)
+
     def nodim(self):
         return ASTUnit(self.si.get("1"), False)
     def boolean(self):
@@ -780,6 +864,7 @@ class Parser:
             self.currentScope().setUnit(var,unit)
         #mark the variable as a diffvar
         self.currentSubsystem().diffvars.add(var)
+        self.currentScope().setSymbol(var, Symbol(var))
         #mark the units for the initial and diff conditions
         rawUnit = self.currentScope().getUnit(var)
         self.currentScope().setUnit(var+".init", rawUnit)
@@ -880,18 +965,18 @@ class Parser:
         self.processUseStatement(name, encap, removeList, exportList)
     def p_useEncapsulationSpec_simpleSamename(self, p):
         '''useEncapsulationSpec : USE NAME useRemoveListOpt'''
-        loookupName = p[2]
+        lookupName = p[2]
         useName = lookupName
-        p[0] = (useName, self.encapsulationStack[0].children[lookupName], p[3])
+        p[0] = (useName, self.lookupEncapsulation(lookupName), p[3])
     def p_useEncapsulationSpec_simpleRenamed(self, p):
         '''useEncapsulationSpec : USE NAME useRemoveListOpt AS NAME'''
         lookupName = p[2]
         useName = p[5]
-        p[0] = (useName, self.encapsulationStack[0].children[lookupName], p[3])
+        p[0] = (useName, self.lookupEncapsulation(lookupName), p[3])
     def p_useEncapsulationSpec_complex(self, p):
         '''useEncapsulationSpec : USE NAME '.' speccedName useRemoveListOpt AS NAME '''
         useName = p[7]
-        retEncap = self.encapsulationStack[0].children[p[2]]
+        retEncap = self.lookupEncapsulation(p[2])
         for name in p[4]:
             retEncap = retEncap.children[name]
         p[0] = (useName, retEncap, p[5])
@@ -1247,10 +1332,12 @@ and && or || not ! 0 2.0 .3 40. 5e+6 if myID */* bljsadfj */ */
 
     HH = '''
 integrate time {ms};
-subsystem hodgkin_huxley_1952 {
-   shared V {mV};
+
+subsystem HH {
+shared V {mV};
    shared Iion {uA/cm^2};
-   shared E_R {mV};
+   provides E_R {mV} = -75;
+   provides E_Na {mV} = (E_R+115{mV});
    subsystem leakage_current {
       E_L {mV} = (E_R+10.613{mV});
       param g_L {mS/cm^2} = 0.3;
@@ -1288,7 +1375,6 @@ subsystem hodgkin_huxley_1952 {
          m.init = 0.05;
          m.diff = (alpha_m*(1-m)-beta_m*m);
       }
-      E_Na {mV} = (E_R+115{mV});
       g_Na {mS/cm^2} = 120;
       i_Na {uA/cm^2} = g_Na*m^3*h*(V-E_Na);
       provides accum Iion += i_Na;
@@ -1299,12 +1385,55 @@ subsystem hodgkin_huxley_1952 {
    }
    subsystem membrane {
       provides diffvar V {mV};
-      provides E_R {mV};
       Cm {uF/cm^2} = 1;
-      E_R {mV} = -75;
       V.init = -75;
       V.diff = -Iion/Cm;
    }
+}
+
+
+subsystem newINa {
+shared V {mV};
+shared E_Na {mV};
+  diffvar m {1};
+  diffvar j {1};
+  diffvar h {1};
+
+  alpha_h = ((V < -40) ? 0.057*exp(-(V+80)/6.8) : 0);
+  beta_h = ((V < -40) ? (2.7*exp(0.079*V)+310000*exp(0.3485*V)) : 0.77/0.13*(1+exp((V+10.66)/-11.1)));
+  h_inf = 1/pow((1+exp((V+71.55)/7.43)),2);
+  tau_h = 1/(alpha_h+beta_h);
+  h.init = 0.7573;
+  h.diff = (h_inf-h)/tau_h;
+
+  alpha_j = ((V < -40) ? (-25428*exp(0.2444*V)-6.948e-6*exp(-0.04391*V))*(V+37.78)/1/(1+exp(0.311*(V+79.23))) : 0);
+  beta_j = ((V < -40) ? 0.02424*exp(-0.01052*V)/(1+exp(-0.1378*(V+40.14))) : 0.6*exp(0.057*V)/(1+exp(-0.1*(V+32))));
+  j_inf = 1/pow((1+exp((V+71.55)/7.43)),2);
+  tau_j = 1/(alpha_j+beta_j);
+  j.init = 0.7225;
+  j.diff = (j_inf-j)/tau_j;
+
+  alpha_m = 1/(1+exp((-60-V)/5));
+  beta_m = (0.1/(1+exp((V+35)/5))+0.1/(1+exp((V-50)/200)));
+  m_inf = 1/pow((1+exp((-56.86-V)/9.03)),2);
+  tau_m = 1*alpha_m*beta_m;
+  m.init = 0.00155;
+  m.diff = (m_inf-m)/tau_m;
+
+  g_Na = 14.838;
+  i_Na = g_Na*pow(m,3)*h*j*(V-E_Na);
+  provides accum i_Natot {uA/cm^2} += i_Na;
+}
+
+subsystem modifiedModel {
+  use HH - .sodium_channel {
+    export V;
+    export Iion;
+  }
+  use newINa as INa {
+    export V;
+    export i_Natot as Iion;
+  } 
 }
 '''
     p = Parser(start="topLevelStatementsOpt")
