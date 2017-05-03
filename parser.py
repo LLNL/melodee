@@ -553,12 +553,18 @@ class Parser:
             while len(speccedName) > 1:
                 exportEncap = exportEncap.children[speccedName[0]]
                 speccedName = speccedName[1:]
-            newJunction = exportEncap.junctions[speccedName[0]]
+            name = speccedName[0]
+            if name in exportEncap.junctions:
+                newJunction = exportEncap.junctions[name]
+            elif name in exportEncap.ports:
+                newJunction = self.connections.junctionFromPort(exportEncap.ports[name])
+            else:
+                raise NoEncapsulationError(name)
             (exists, oldJunction) = self.searchForJunction(exportName)
             if not exists:
                 self.currentEncapsulation().setJunction(exportName, newJunction)
             else:
-                self.connections.substituteJunction(newJunction,oldJunction)# FIXME
+                self.connections.substituteJunction(newJunction,oldJunction)
         self.currentEncapsulation().addChild(childName, newEncap)
 
     def nodim(self):
@@ -982,7 +988,7 @@ class Parser:
         p[0] = [p[1]]
     def p_specceedName_specified(self, p):
         '''speccedName : speccedName '.' NAME'''
-        p[0] = p[1] + [p[2]]
+        p[0] = p[1] + [p[3]]
     def p_useBlockStatementListOpt_empty(self, p):
         '''useBlockStatementListOpt : empty'''
         p[0] = []
@@ -1418,14 +1424,14 @@ subsystem newINa {
 
 subsystem modifiedModel {
   use HH - .sodium_channel {
-    //export V;
+    export leakage_current.V;
     export Iion;
     export E_Na;
   }
   use newINa as INa {
-    //export V;
+    export V;
     export i_Natot as Iion;
-    //export E_Na;
+    export E_Na;
   } 
 }
 '''
