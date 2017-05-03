@@ -567,6 +567,9 @@ class Parser:
                 self.connections.substituteJunction(newJunction,oldJunction)
         self.currentEncapsulation().addChild(childName, newEncap)
 
+    def checkConnections(self, topEncap, encap):
+        pass
+        
     def nodim(self):
         return ASTUnit(self.si.get("1"), False)
     def boolean(self):
@@ -742,11 +745,22 @@ class Parser:
 
     def p_topLevelStatement(self, p):
         '''topLevelStatement : sharedStatement
-                             | subSystemDefinition
                              | integrateStatement
         '''
         pass
-
+    def p_topLevelSubsystem(self, p):
+        '''topLevelStatement : topLevelSubsystemBegin subSystemDefinition'''
+        topEncap = self.encapsulationStack.pop()
+        (name, encap) = p[2]
+        self.currentEncapsulation().addChild(name,encap)
+        self.checkConnections(topEncap, encap)
+        
+    def p_topLevelSubsystemBegin(self, p):
+        '''topLevelSubsystemBegin : empty'''
+        thisTopEncap = self.currentEncapsulation().copy(self.connections)
+        self.encapsulationStack.append(thisTopEncap)
+        p[0] = thisTopEncap
+        
     def p_integrateStatement(self, p):
         '''integrateStatement : INTEGRATE var unitDef ';'
         '''
@@ -771,9 +785,8 @@ class Parser:
         self.scopeStack.pop()
         thisEncapsulation = self.encapsulationStack.pop()
         thisSubsystem = thisEncapsulation.subsystem
-        self.currentEncapsulation().addChild(p[1],thisEncapsulation)
         print strifyInstructions(thisSubsystem.scope.instructions, thisSubsystem.ssa)
-        p[0] = thisSubsystem
+        p[0] = (p[1],thisEncapsulation)
 
     def p_subSystemBegin(self, p):
         '''subSystemBegin : SUBSYSTEM NAME '{' '''
@@ -794,8 +807,8 @@ class Parser:
 
     def p_subSystemStatement_subSystem(self, p):
         '''subSystemStatement : subSystemDefinition'''
-        #print self.subsystemStack
-        pass
+        (name, encap) = p[1]
+        self.currentEncapsulation().addChild(name,encap)
 
     def p_subSystemStatement_accum(self, p):
         '''subSystemStatement : PROVIDES ACCUM var unitOpt accumDefOpt ';' '''
