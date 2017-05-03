@@ -234,7 +234,27 @@ class Encapsulation:
             other.ports[name] = newPortFromOld[oldPort]
         return other
     def allLocalPorts(self):
-        return self.ports.values()
+        return set(self.ports.values())
+    def allLocalJunctions(self):
+        return set(self.junctions.values())
+    def nameEncapFromPort(self, ret=None):
+        if ret==None:
+            ret={}
+        for (var, port) in self.ports.items():
+            ret[port] = (var, self)
+        for child in self.children.values():
+            child.nameEncapFromPort(ret)
+        return ret
+    def allJunctions(self):
+        ret = self.allLocalJunctions()
+        for child in self.children.values():
+            ret |= child.allJunctions()
+        return ret
+    def allPorts(self):
+        ret = self.allLocalPorts()
+        for child in self.children.values():
+            ret |= child.allPorts()
+        return ret
     def removeChild(self, name, connections):
         child = self.children[name]
         child.removeConnections(connections)
@@ -246,6 +266,12 @@ class Encapsulation:
             connections.removePort(port)
         for junction in self.junctions.values():
             connections.removeJunction(junction)
+    def isInput(self, var):
+        return var in self.subsystem.inputs
+    def isOutput(self, var):
+        return var in self.subsystem.outputs
+    def isAccum(self, var):
+        return var in self.subsystem.accums
         
         
 class Subsystem:
@@ -568,7 +594,34 @@ class Parser:
         self.currentEncapsulation().addChild(childName, newEncap)
 
     def checkConnections(self, topEncap, encap):
-        pass
+        #Get a list of all internal junctions
+        internalJunctions = encap.allJunctions()
+        #make a mapping between ports and encapsulation/name pairs
+        nameEncapFromPort = encap.nameEncapFromPort()
+        #for each internal junction
+        for thisJunction in internalJunctions:
+            #get the ports for this junction
+            thesePorts = self.connections.portsFromJunction(thisJunction)
+            #if any of the ports are input ports
+            foundInputPorts = False
+            for (var, encap) in [nameEncapFromPort[port] for port in thesePorts]:
+                if encap.isInput(var):
+                    foundInputPorts = True
+                    break;
+            if foundInputPorts:
+                #make sure the port is assigned a value by someone
+                outputs = []
+                accums = []
+                for (var, encap) in [nameEncapFromPort[port] for port in thesePorts]:
+                    if encap.isOutput(var):
+                        outputs.append((var,encap))
+                    if encap.isAccum(var):
+                        accums.append((var,encap))
+                assert(len(accums) <= len(outputs))
+                if len(outputs) < 1:
+                    raise XXXSyntaxError("No definition for %s in %s"  %(var, encap))
+                if len(outputs) > 1 and len(outputs) != len(accums):
+                    raise XXXSyntaxError("Can't mix output and accum for %s" % var)
         
     def nodim(self):
         return ASTUnit(self.si.get("1"), False)
