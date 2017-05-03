@@ -197,10 +197,7 @@ class Encapsulation:
         self.subsystem = subsystem
         self.children = {}
         self.junctions = {}
-        self.inputs = {}
-        self.assigns = {}
-        self.accums = {}
-        self.diffvars = {}
+        self.ports = {}
     def hasJunction(self, name):
         return name in self.junctions
     def getJunction(self, name):
@@ -214,6 +211,10 @@ class Encapsulation:
     def copy(self, connections, newJuncFromOld=None):
         if newJuncFromOld == None:
             newJuncFromOld = {}
+        for (name,oldJunction) in self.junctions.items():
+            if oldJunction not in newJuncFromOld:
+                newJuncFromOld[oldJunction] = connections.makeJunction(oldJunction.rawUnit)
+
         other = Encapsulation()
         other.subsystem = self.subsystem
         for (name,encap) in self.children.items():
@@ -226,24 +227,14 @@ class Encapsulation:
                 newJuncFromOld[oldJunction] = connections.makeJunction(oldJunction.rawUnit)
             newJunction = newJuncFromOld[oldJunction]
             newPortFromOld[oldPort] = connections.makePort(newJunction)
-
+        
         for (name,oldJunction) in self.junctions.items():            
             other.junctions[name] = newJuncFromOld[oldJunction]
-        for (name,oldPort) in self.inputs.items():
-            other.inputs[name] = newPortFromOld[oldPort]
-        for (name,oldPort) in self.assigns.items():
-            other.assigns[name] = newPortFromOld[oldPort]
-        for (name,oldPort) in self.accums.items():
-            other.accums[name] = newPortFromOld[oldPort]
-        for (name,oldPort) in self.diffvars.items():
-            other.diffvars[name] = newPortFromOld[oldPort]
+        for (name,oldPort) in self.ports.items():
+            other.ports[name] = newPortFromOld[oldPort]
         return other
     def allLocalPorts(self):
-        return (self.inputs.values()
-                +self.assigns.values()
-                +self.accums.values()
-                +self.diffvars.values()
-                )
+        return self.ports.values()
     def removeChild(self, name, connections):
         child = self.children[name]
         child.removeConnections(connections)
@@ -360,7 +351,7 @@ class Parser:
             (exists, junction) = self.searchForJunction(var)
             if exists:
                 port = self.connections.makePort(junction)
-                encapsulation.inputs[var] = port
+                encapsulation.ports[var] = port
                 #make a symbol for this guy, mark it as an input
                 symbol = Symbol(var)
                 subsystem.scope.setSymbol(var, symbol)
@@ -803,7 +794,7 @@ class Parser:
     def p_subSystemStatement_accum(self, p):
         '''subSystemStatement : PROVIDES ACCUM var unitOpt accumDefOpt ';' '''
         junction = self.markProvides(p[3],p[4])
-        self.currentEncapsulation().accums[p[3]] = self.connections.makePort(junction)
+        self.currentEncapsulation().ports[p[3]] = self.connections.makePort(junction)
         #mark that junction as an accum junction
         #FIXME
         #mark the variable as an accum
@@ -830,7 +821,7 @@ class Parser:
         if p[1] == "provides":
             (var, unit, assignOpt) = (p[3],p[4],p[5])
             junction = self.markProvides(var,unit)
-            self.currentEncapsulation().assigns[var] = self.connections.makePort(junction)
+            self.currentEncapsulation().ports[var] = self.connections.makePort(junction)
         else:
             (var, unit, assignOpt) = (p[2],p[3],p[4])
             self.checkDeclarable(var)
@@ -857,7 +848,7 @@ class Parser:
         if p[1] == "provides":
             (var, unit) = (p[3],p[4])
             junction = self.markProvides(var,unit)
-            self.currentEncapsulation().diffvars[var] = self.connections.makePort(junction)
+            self.currentEncapsulation().ports[var] = self.connections.makePort(junction)
         else:
             (var, unit) = (p[2],p[3])
             self.checkDeclarable(var)
@@ -873,7 +864,7 @@ class Parser:
     def p_subSystemStatement_output(self, p):
         '''subSystemStatement : PROVIDES var unitOpt assignOpt ';' '''
         junction = self.markProvides(p[2],p[3])
-        self.currentEncapsulation().assigns[p[2]] = self.connections.makePort(junction)
+        self.currentEncapsulation().ports[p[2]] = self.connections.makePort(junction)
         #if there's a definition, process it.
         if p[4] != None:
             self.processAssignment(p[2],'=',p[4]) 
