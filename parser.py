@@ -204,6 +204,8 @@ class Encapsulation:
         return self.junctions[name]
     def setJunction(self, name, junction):
         self.junctions[name] = junction
+    def clearJunctions(self):
+        self.junctions = {}
     def addChild(self, name, encapsulation):
         if name in self.children:
             raise MultipleAssignmentDisallowed(name)
@@ -320,7 +322,7 @@ def strifyInstructions(ilist, ssa, indent=0):
     return ret
 
         
-class Parser:
+class MelodeeParser:
     def __init__(self, **kw):
         self.debug = kw.get('debug', 0),
         self.start = kw.get('start', 'topLevelStatementsOpt')
@@ -331,13 +333,17 @@ class Parser:
                                 start=self.start,
         )
         self.si = units.Si()
+        self.connections = Connections()
         self.scopeStack = []
+        self.tempCount = 0
+        self.enumerations = {}
         self.encapsulationStack = [Encapsulation()]
+        self.clearEnvironment()
+
+    def clearEnvironment(self):
         self.timeVar = None
         self.timeUnit = None
-        self.enumerations = {}
-        self.tempCount = 0
-        self.connections = Connections()
+        self.encapsulationStack[0].clearJunctions()
         
     def currentSubsystem(self):
         return self.currentEncapsulation().subsystem
@@ -1353,9 +1359,9 @@ class Parser:
     #    '''subSystemStatement : renameStatement'''
     #    pass
 
-
+    
 if __name__=="__main__":
-    p = Parser()
+    p = MelodeeParser()
     data = '''
 and && or || not ! 0 2.0 .3 40. 5e+6 if myID */* bljsadfj */ */
 '''
@@ -1367,11 +1373,11 @@ and && or || not ! 0 2.0 .3 40. 5e+6 if myID */* bljsadfj */ */
             break
         print tok
 
-    p = Parser(start="unitExpr")
+    p = MelodeeParser(start="unitExpr")
     print p.parse("mV/ms")
     print p.parse("uA/uF")
 
-    p = Parser(start="realExpr")
+    p = MelodeeParser(start="realExpr")
     p.p_subSystemBegin([None, 'subsystem', "testing", '{'])
     p.currentScope().setSymbol("a", Symbol("a"))
     p.currentScope().setSymbol("b", Symbol("b"))
@@ -1501,5 +1507,5 @@ subsystem modifiedModel {
   } 
 }
 '''
-    p = Parser(start="topLevelStatementsOpt")
+    p = MelodeeParser(start="topLevelStatementsOpt")
     p.parse(HH)
