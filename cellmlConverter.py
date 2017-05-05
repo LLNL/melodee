@@ -25,6 +25,7 @@
 
 from xml.etree import cElementTree as ET
 import sys
+from utility import Indenter,order,unzip
 
 xmlns = {"http://www.cellml.org/cellml/1.0#" : "cellml",
          "http://www.w3.org/1998/Math/MathML" : "math",
@@ -43,42 +44,6 @@ def stripNamespaces(elementRoot):
                 el.attrib[newat] = el.attrib[at]
                 del el.attrib[at]
     return elementRoot
-
-class Indenter:
-    def __init__(self, fff=sys.stdout, indentString="   "):
-        self.indent = indentString
-        self.indentAmount = 0
-        self.outfile = fff
-
-    def __call__(self, string, *args, **kwargs):
-        if string[-1] != '\n':
-            string += "\n"
-        outstring = (self.indent*self.indentAmount) + string
-        if kwargs:
-            print >>self.outfile, (outstring % kwargs),
-        elif len(args) == 1 and type(args[0]) == dict:
-            print >>self.outfile, (outstring % args[0]),
-        elif len(args) == 1:
-            print >>self.outfile, (outstring % args[0]),
-        elif len(args) == 0:
-            print >>self.outfile, outstring,
-        else:
-            print >>self.outfile, (outstring % args),
-
-    def inc(self):
-        self.indentAmount += 1
-
-    def dec(self):
-        self.indentAmount -= 1
-
-def order(iterable):
-    ret = [item for item in iterable]
-    ret.sort()
-    return ret
-
-def unzip(lll):
-    """Does the opposite of zip"""
-    return zip(*lll)
 
 class Equation:
     def __init__(self, lhs, rhs, unit=None, dependencies=set(), isDiff=False):
