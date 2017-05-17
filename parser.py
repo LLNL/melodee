@@ -514,6 +514,7 @@ class ConsolidatedSystem:
 
         while undefinedInstructions:
             removeThisIter = set()
+            newlyDefinedSyms = set()
             for inst in undefinedInstructions:
                 syms = symsFromInstruction[inst]
                 depend = dependFromInstruction[inst]
@@ -523,14 +524,17 @@ class ConsolidatedSystem:
                 if depend <= definedSymbols:
                     #print "DEFINING", syms
                     removeThisIter.add(inst)
-                    self.instructions.append(inst)
-                    definedSymbols |= syms
+                    newlyDefinedSyms |= syms
             if not removeThisIter:
                 print undefinedInstructions
                 print len(undefinedInstructions)
                 print definedSymbols
                 assert(removeThisIter)
+            #FIXME, need order() here for reproducable results
+            for inst in removeThisIter:
+                self.instructions.append(inst)
             undefinedInstructions -= removeThisIter
+            definedSymbols |= newlyDefinedSyms
             #print "---------------------------------------------------------------"
         
 class Subsystem:
