@@ -28,6 +28,12 @@ import ply.yacc as yacc
 import sympy
 import units
 
+#these parts make up the external API
+
+
+
+#############################################################################
+
 class XXXSyntaxError:
     def __init__(self, text):
         self.text = text
@@ -48,7 +54,19 @@ class SSA(dict):
             print key, value
             raise MultipleSymbolAssignment(key)
         dict.__setitem__(self,key,value)
-
+    def dependencies(self, symbolMaybeList):
+        # get dependecies for a list or a single symbol
+        try:
+            iter(symbolMaybeList)
+        except TypeError:
+            #just a regular symbol
+            return self[symbolMaybeList].dependencies()
+        else:
+            ret = set()
+            for sym in symbolMaybeList:
+                ret |= self[sym].dependencies()
+            return ret
+            
 class IfInstruction:
     def __init__(self, ifVar, thenInstructions, elseInstructions, choiceInstructions):
         self.ifVar = ifVar
@@ -70,6 +88,11 @@ class Choice:
         )
     def dependencies(self):
         return set([self.ifVar, self.thenVar, self.elseVar])
+    def subs(self, subMap):
+        newIfVar = subMap.get(self.ifVar, self.ifVar)
+        newThenVar = subMap.get(self.thenVar, self.thenVar)
+        newElseVar = subMap.get(self.elseVar, self.elseVar)
+        return Choice(newIfVar,newThenVar,newElseVar,self.astUnit)
 
 class AST:
     def __init__(self, sympyExpr, unit=None):
@@ -78,7 +101,9 @@ class AST:
     def __repr__(self):
         return 'AST(sympify(' + repr(self.sympy) +'), '+ repr(self.astUnit) +')'
     def dependencies(self):
-        return self.sympy.atoms(Symbol)
+        return set(self.sympy.atoms(Symbol))
+    def subs(self, subMap):
+        return AST(self.sympy.subs(subMap),self.astUnit)
 
 def textToAST(text, unit):
     return AST(sympy.sympify(text), unit)
@@ -239,6 +264,13 @@ class Encapsulation:
         return set(self.ports.values())
     def allLocalJunctions(self):
         return set(self.junctions.values())
+    def allEncap(self, ret=None):
+        if ret==None:
+            ret = []
+        ret.append(self)
+        for child in self.children.values():
+            child.allEncap(ret)
+        return ret
     def nameEncapFromPort(self, ret=None):
         if ret==None:
             ret={}
@@ -274,7 +306,232 @@ class Encapsulation:
         return var in self.subsystem.outputs
     def isAccum(self, var):
         return var in self.subsystem.accums
+    def instructions(self):
+        return self.subsystem.scope.instructions
+
+def fullName(tupleName):
+    return ":".join(tupleName)
+
+class ConsolidatedSystem:
+    '''Output a system that reduces an encap to a useable core'''
+    def __init__(self, timeUnit, externalJunctions, rootEncap, connections):
+
+        nameFromEncap={}
+        def nameAllEncaps(encap, myName=(), retval=None):
+            retval[encap] = myName
+            for (postfix, child) in encap.children.items():
+                nameAllEncaps(child, myName+(postfix,), retval)
+            return retval
+        nameFromEncap = nameAllEncaps(rootEncap, (), {})
+
+        allEncap = nameFromEncap.keys()
+
+        #go ahead and name all the junctions, get their symbols
+        symbolFromJunction = {}
+        for (encap, tupName) in nameFromEncap.items():
+            for (name,junction) in encap.junctions.items():
+                symbolFromJunction[junction] = Symbol(fullName(tupName + (name,)))
+        for (name, junction) in externalJunctions.items():
+            symbolFromJunction[junction] = Symbol(fullName(("_external",name)))
+                
+        # deal with the assignment issues.
+        isAccum = set()
+        isAssign = set()
+        for encap in allEncap:
+            for (name,port) in encap.ports.items():
+                junction = connections.junctionFromPort(port)
+                symbol = symbolFromJunction[junction]
+                if encap.isAccum(name):
+                    assert(encap.isOutput(name))
+                    if junction in isAssign:
+                        raise XXXSyntaxError("Can't both assign and accumulate variable %s." % str(symbol))
+                    isAccum.add(junction)
+                elif encap.isOutput(name):
+                    if junction in isAssign:
+                        raise XXXSyntaxError("Can't assign to variable %s more than once." % str(symbol))
+                    if junction in isAccum:
+                        raise XXXSyntaxError("Can't both assign and accumulate variable %s." % str(symbol))
+                    isAssign.add(junction)
+
+        # see if we ever mess with time
+        timeName = None
+        for encap in allEncap:
+            if encap.subsystem.time != None:
+                timeName = encap.subsystem.time
+                break
+        if timeName != None:
+            timeSym = Symbol(timeName)
+        else:
+            timeSym = None
+
+        #build the symbol correspondence
+        class SymbolMapping:
+            def __init__(self):
+                self._map = {}
+            def get(self, encap, symbol,tupName):
+                if (encap, symbol) not in self._map:
+                    self._map[(encap,symbol)] = Symbol(fullName(tupName + (str(symbol),)))
+                return self._map[(encap,symbol)]
+            def set(self, encap, oldSym, newsymbol):
+                self._map[(encap,oldSym)] = newsymbol
+            def getList(self, encap, symbolList, tupName):
+                return [self.get(encap, oldSym, tupName) for oldSym in symbolList]
+
+
+        #build the SSA
+        convertedInstructions = []
+        self.ssa = SSA()
+        symbolMap = SymbolMapping()
+        accumsFromJunction = {}
+        for (encap,tupName) in nameFromEncap.items():
+            subsystem = encap.subsystem
+            for (name,port) in encap.ports.items():
+                junction = connections.junctionFromPort(port)
+                newsymbol = symbolFromJunction[junction]
+                if encap.isInput(name):
+                    symbolMap.set(encap,subsystem.getVar(name),newsymbol)
+                elif encap.isAccum(name):
+                    newsymbol = symbolMap.get(encap,subsystem.getVar(name),tupName)
+                    symbolMap.set(encap,subsystem.getVar(name),newsymbol)
+                    accumsFromJunction.setdefault(junction, []).append(newsymbol)
+                else:
+                    assert(encap.isOutput(name))
+                    symbolMap.set(encap,subsystem.getVar(name),newsymbol)
+
+            #process time vars here.
+            if subsystem.time != None:
+                assert(timeSym != None)
+                oldSym = subsystem.getVar(subsystem.time)
+                oldUnit = subsystem.getUnit(subsystem.time)
+                if oldUnit == timeUnit:
+                    symbolMap.set(encap, oldSym, timeSym)
+                else:
+                    newSym = symbolMap.get(encap, oldSym,tupName)
+                    convertedInstructions.append(newSym)
+                    self.ssa[newSym] = AST(sympy.Mul(timeSym,oldUnit.convertTo(newUnit)),ASTUnit(timeUnit,False))
+            #process other named variables
+            #for oldSym in subsystem.allSymbols():
+            #    symbolMap.get(encap,oldSym,tupName)
+            #process the remaining symbols
+            for (oldSym, oldAst) in subsystem.ssa.items():
+                newSym = symbolMap.get(encap,oldSym,tupName)
+                localSubs = {}
+                for depSym in oldAst.dependencies():
+                    localSubs[depSym] = symbolMap.get(encap,depSym,tupName)
+                self.ssa[newSym] = oldAst.subs(localSubs)
         
+        # Add SSA symbols for accumulations
+        for (junction,accums) in accumsFromJunction.items():
+            assert(len(accums) >= 1)
+            newSymbol = symbolFromJunction[junction]
+            convertedInstructions.append(newSymbol)
+            self.ssa[newSymbol] = AST(sympy.Add(*accums), ASTUnit(junction.rawUnit,False))
+
+        #get the inputs/outputs
+        self.inputs = set()
+        self.outputs = set()
+        for (name,junction) in externalJunctions.items():
+            symbol = symbolFromJunction[junction]
+            if junction in isAssign or junction in isAccum:
+                self.outputs.add(symbol)
+            else:
+                self.inputs.add(symbol)
+        # fix time
+        self.time = timeSym
+
+        #get the diffvars and params
+        self.diffvars = set()
+        self.diffvarUpdate = {}
+        self.params = set()
+        
+        for (encap,tupName) in nameFromEncap.items():
+            subsystem = encap.subsystem
+            for name in subsystem.diffvars:
+                oldSym = subsystem.getVar(name)
+                newSym = symbolMap.get(encap,oldSym,tupName)
+                self.diffvars.add(newSym)
+                convertedInstructions.append(newSym)
+                diffUnit = subsystem.getUnit(name)
+                self.ssa[newSym] = AST(symbolMap.get(encap,subsystem.getVar(name+".init"),tupName),ASTUnit(diffUnit,False))
+                updateUnit = subsystem.getUnit(name+".diff")
+                updateSym = symbolMap.get(encap,subsystem.getVar(name+".diff"),tupName)
+                if diffUnit/updateUnit == timeUnit:
+                    self.diffvarUpdate[newSym] = updateSym
+                else:
+                    newName = fullName(tupName + (name+".diff_convertUnit",))
+                    newDiff = Symbol(newName)
+                    convertedInstructions.append(newDiff)
+                    self.ssa[newDiff] = AST(sympy.Mul(updateSym,updateUnit.convertTo(diffUnit/timeUnit)),
+                                           ASTUnit(diffUnit/timeUnit,False));
+                    self.diffvarUpdate[newSym] = newDiff
+            for name in subsystem.params:
+                oldSym = subsystem.getVar(name)
+                self.params.add(symbolMap.get(encap,oldSym,tupName))
+
+        
+
+        
+        #list all the instructions.
+        for (encap, tupName) in nameFromEncap.items():
+            def convert(inst, symbolMap=symbolMap, encap=encap, tupName=tupName):
+                if isinstance(inst,IfInstruction):
+                    return IfInstruction(
+                        symbolMap.get(encap,inst.ifVar,tupName),
+                        [convert(sub) for sub in inst.thenInstructions],
+                        [convert(sub) for sub in inst.elseInstructions],
+                        [convert(sub) for sub in inst.choiceInstructions],
+                        )
+                else:
+                    return symbolMap.get(encap,inst,tupName)
+            for inst in encap.instructions():
+                convertedInstructions.append(convert(inst))
+
+        #order the converted instructions
+        def symsFromInstructionGenerator(root):
+            if isinstance(root, IfInstruction):
+                ret = set()
+                for inst in root.thenInstructions:
+                    ret |= symsFromInstructionGenerator(inst)
+                for inst in root.elseInstructions:
+                    ret |= symsFromInstructionGenerator(inst)
+                ret |= set(root.choiceInstructions)
+                return ret
+            else:
+                return set([root])
+        symsFromInstruction= {}
+        for inst in convertedInstructions:
+            symsFromInstruction[inst] = symsFromInstructionGenerator(inst)
+        dependFromInstruction={}
+        for inst in convertedInstructions:
+            syms = symsFromInstruction[inst]
+            dependFromInstruction[inst] = self.ssa.dependencies(syms)-syms
+
+        self.instructions = []
+        undefinedInstructions = set(convertedInstructions)
+        definedSymbols = set()
+        if self.time != None:
+            definedSymbols.add(self.time)
+
+        while undefinedInstructions:
+            removeThisIter = set()
+            for inst in undefinedInstructions:
+                syms = symsFromInstruction[inst]
+                depend = dependFromInstruction[inst]
+                #print "===",inst
+                #print "+++",symsFromInstruction[inst]
+                #print "+++",depend
+                if depend <= definedSymbols:
+                    #print "DEFINING", syms
+                    removeThisIter.add(inst)
+                    self.instructions.append(inst)
+                    definedSymbols |= syms
+            if not removeThisIter:
+                print undefinedInstructions
+                print len(undefinedInstructions)
+                print definedSymbols
+                assert(removeThisIter)
+            undefinedInstructions -= removeThisIter
+            #print "---------------------------------------------------------------"
         
 class Subsystem:
     def __init__(self):
@@ -304,6 +561,11 @@ class Subsystem:
                     newFront |= self.ssa[symbol].dependencies()
             front = newFront-dependencies
         return dependencies
+
+    def getVar(self, name):
+        return self.scope.getSymbol(name)
+    def getUnit(self,name):
+        return self.scope.getUnit(name)
             
 def strifyInstructions(ilist, ssa, indent=0):
     myIndent = "   "*indent
@@ -338,8 +600,19 @@ class MelodeeParser:
         self.tempCount = 0
         self.enumerations = {}
         self.encapsulationStack = [Encapsulation()]
+        self.externalJuncFromEncapName = {}
+        self.timeUnitFromEncapName = {}
         self.clearEnvironment()
 
+    def parse(self, text):
+        self.clearEnvironment()
+        self.parser.parse(text)
+    def getModel(self, name):
+        rootEncap = self.encapsulationStack[0].children[name]
+        externalJunctions = self.externalJuncFromEncapName[name]
+        timeUnit = self.timeUnitFromEncapName[name]
+        return ConsolidatedSystem(timeUnit,externalJunctions,rootEncap,self.connections)
+        
     def clearEnvironment(self):
         self.timeVar = None
         self.timeUnit = None
@@ -574,7 +847,7 @@ class MelodeeParser:
     def processUseStatement(self, childName, encap, removeList, exportList):
         newEncap = encap.copy(self.connections)
         for removeItem in removeList:
-            removeEncap = encap
+            removeEncap = newEncap
             while len(removeItem) > 1:
                 removeEncap = removeEncap.children[removeItem[0]]
                 removeItem = removeItem[1:]
@@ -668,9 +941,6 @@ class MelodeeParser:
             factor = expr.astUnit.rawUnit.convertTo(newUnit)
             return AST(sympy.Mul(factor,expr.sympy), ASTUnit(newUnit, explicit=False))
     
-    def parse(self, s):
-        return self.parser.parse(s)
-
     #def astToVar(self, var, ast):
     #    self.currentSubsystem().ssa[var] = ast
     #    self.currentScope().addInstruction(var)
@@ -811,6 +1081,8 @@ class MelodeeParser:
         '''topLevelStatement : topLevelSubsystemBegin subSystemDefinition'''
         topEncap = self.encapsulationStack.pop()
         (name, encap) = p[2]
+        self.timeUnitFromEncapName[name] = self.timeUnit
+        self.externalJuncFromEncapName[name] = topEncap.junctions
         self.currentEncapsulation().addChild(name,encap)
         self.checkConnections(topEncap, encap)
         
@@ -844,7 +1116,6 @@ class MelodeeParser:
         self.scopeStack.pop()
         thisEncapsulation = self.encapsulationStack.pop()
         thisSubsystem = thisEncapsulation.subsystem
-        print strifyInstructions(thisSubsystem.scope.instructions, thisSubsystem.ssa)
         p[0] = (p[1],thisEncapsulation)
 
     def p_subSystemBegin(self, p):
@@ -1509,3 +1780,5 @@ subsystem modifiedModel {
 '''
     p = MelodeeParser(start="topLevelStatementsOpt")
     p.parse(HH)
+    model = p.getModel("modifiedModel")
+    print strifyInstructions(model.instructions, model.ssa)
