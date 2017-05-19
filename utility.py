@@ -23,6 +23,10 @@
 # permissions and limitations under the license.
 #### </license> #### 
 
+import sys
+import re
+import sympy
+
 class Indenter:
     def __init__(self, fff=sys.stdout, indentString="   "):
         self.indent = indentString
@@ -30,19 +34,25 @@ class Indenter:
         self.outfile = fff
 
     def __call__(self, string, *args, **kwargs):
-        if string[-1] != '\n':
-            string += "\n"
-        outstring = (self.indent*self.indentAmount) + string
-        if kwargs:
-            print >>self.outfile, (outstring % kwargs),
-        elif len(args) == 1 and type(args[0]) == dict:
-            print >>self.outfile, (outstring % args[0]),
-        elif len(args) == 1:
-            print >>self.outfile, (outstring % args[0]),
-        elif len(args) == 0:
-            print >>self.outfile, outstring,
-        else:
-            print >>self.outfile, (outstring % args),
+        initialstrip = string.lstrip('\n')
+        if not initialstrip:
+            print >>self.outfile, string,
+            return
+        indentString = self.indent*self.indentAmount
+        for line in initialstrip.split('\n'):
+            outline = indentString+line
+            if line == "":
+                print >>self.outfile, "\n"
+            elif kwargs:
+                print >>self.outfile, (outline % kwargs)
+            elif len(args) == 1 and type(args[0]) == dict:
+                print >>self.outfile, (outline % args[0])
+            elif len(args) == 1:
+                print >>self.outfile, (outline % args[0])
+            elif len(args) == 0:
+                print >>self.outfile, outline
+            else:
+                print >>self.outfile, (outline % args)
 
     def inc(self):
         self.indentAmount += 1
@@ -52,7 +62,10 @@ class Indenter:
 
 def order(iterable):
     ret = [item for item in iterable]
-    ret.sort()
+    if ret and isinstance(ret[0], sympy.Symbol):
+        ret.sort(key=str)
+    else:
+        ret.sort()
     return ret
 
 def unzip(lll):

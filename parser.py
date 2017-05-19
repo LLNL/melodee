@@ -314,6 +314,39 @@ def fullName(tupleName):
 
 class ConsolidatedSystem:
     '''Output a system that reduces an encap to a useable core'''
+
+    def dependencies(self, var):
+        return self.ssa.dependencies(var)
+    
+    def allDependencies(self, good, target):
+        depend = set()
+        front = set(target)
+        while front:
+            newFront = set()
+            for var in front:
+                if var not in good:
+                    depend.add(var)
+                    newFront |= self.dependencies(var)
+            front = newFront
+        return depend
+    
+    def printTarget(self, good, target, printVisitor):
+        allUpdate = self.allDependencies(good, target)
+
+        def printer(instructions, allUpdate=allUpdate, printVisitor=printVisitor):
+            for inst in instructions:
+                if isinstance(inst, IfInstruction) and inst.ifVar in allUpdate:
+                    printVisitor.ifPrint(inst.ifVar)
+                    printer(inst.thenInstructions)
+                    printVisitor.elsePrint()
+                    printer(inst.elseInstructions)
+                    printVisitor.endifPrint()
+                else:
+                    if inst in allUpdate:
+                        printVisitor.equationPrint(inst, self.ssa[inst])
+        printer(self.instructions)
+                
+    
     def __init__(self, timeUnit, externalJunctions, rootEncap, connections):
 
         nameFromEncap={}
