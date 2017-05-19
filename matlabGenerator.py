@@ -80,7 +80,7 @@ def generateMatlab(model, targetName, initFile, diffFile):
     params = model.params
     printer = MatlabPrintVisitor(out,params)
     out("""
-function [__y_init, __params] = %(target)s_init(varargin)
+function [__y_init, __ordering, __params] = %(target)s_init(varargin)
    narginchk(0,1);
    if (nargin >= 1)
       __params = varargin{1};
@@ -115,7 +115,11 @@ function [__y_init, __params] = %(target)s_init(varargin)
     out("__y_init = zeros(%d, 1);", len(diffvarNumbering))
     for var in order(model.diffvars):
         out("__y_init(%d) = %s;",diffvarNumbering[var],pretty(var))
-    
+
+    out("__ordering = struct();")
+    for var in order(model.diffvars):
+        out("__ordering.%s = %d;", pretty(var),diffvarNumbering[var])
+        
     out.dec()
     out("""
 end
