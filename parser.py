@@ -23,9 +23,13 @@
 # permissions and limitations under the license.
 #### </license> #### 
 
+import re
+import sympy
+
+
 import ply.lex as lex
 import ply.yacc as yacc
-import sympy
+
 import units
 
 #these parts make up the external API
@@ -569,7 +573,48 @@ class ConsolidatedSystem:
             undefinedInstructions -= removeThisIter
             definedSymbols |= newlyDefinedSyms
             #print "---------------------------------------------------------------"
+
+        #now we need to fix variable names.  ideally, we'd like to
+        #use the shortest name everywhere if at all possible
+            
+        #this is just a first pass.  Ideally, we'd like to
+        #recognize when a name is no longer used but I'm not
+        #requiring that here.
+        def uniqueNames(instructions, nameMap={}, currentNames=set()):
+            for inst in instructions:
+                if isinstance(inst,IfInstruction):
+                    uniqueNames(inst.thenInstructions,nameMap,set(currentNames))
+                    uniqueNames(inst.elseInstructions,nameMap,set(currentNames))
+                    uniqueNames(inst.choiceInstructions,nameMap,currentNames)
+                else:
+                    simpleName = re.sub(r'\.','_',str(inst))
+                    nameArray = simpleName.split(r':')
+                    lb=len(nameArray)-1
+                    while lb >= 0 and "_".join(nameArray[lb:]) in currentNames:
+                        lb += -1
+                    if lb > -1:
+                        name = "_".join(nameArray[lb:])
+                    else:
+                        count = 1
+                        base = "_".join(nameArray)
+                        while True:
+                            name = base + "_" + str(count)
+                            if name not in currentNames:
+                                break
+                            else:
+                                count += 1
+                    nameMap[inst] = name
+                    currentNames.add(name)
+            return nameMap
+        nameMap = uniqueNames(self.instructions)
+        #now rename all the variables.
+        for (var,name) in nameMap.items():
+            var.name = name
         
+            
+        
+
+                            
 class Subsystem:
     def __init__(self):
         self.ssa = SSA()

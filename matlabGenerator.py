@@ -33,7 +33,7 @@ import utility
 from utility import order
 
 def pretty(symbol):
-    return re.sub(r':|\.','_',str(symbol))
+    return str(symbol)
 
 
 class MatlabPrintVisitor:
@@ -127,7 +127,8 @@ end
 function __dydt = %(target)s(__time,__diffvars,varargin)
 """ % template)
     out.inc()
-
+    out("__dydt = zeros(%d,1);" % len(diffvarNumbering))
+    
     good = set()
     if model.time != None:
         out("% define time")
@@ -144,15 +145,15 @@ function __dydt = %(target)s(__time,__diffvars,varargin)
     else:
         template["arglower"] = 2
 
-        out("""
+    out("""
 narginchk(%(arglower)d,3);
 if (nargin >= 3)
-   __params = varargin{3};
+    __params = varargin{1};
 else
    __params = struct();
 end
 """ % template)
-
+        
     if model.inputs:
         out("% define all inputs")
         good |= model.inputs
@@ -182,8 +183,8 @@ if __name__=="__main__":
         p.parse(open(filename,"r").read())
     
     generateMatlab(p.getModel(target), target,
-                   utility.Indenter(sys.stdout),
-                   utility.Indenter(sys.stdout),
-                   #utility.Indenter(open(target+"_init.m","w")),
-                   #utility.Indenter(open(target+"_diff.m","w")),
+                   #utility.Indenter(sys.stdout),
+                   #utility.Indenter(sys.stdout),
+                   utility.Indenter(open(target+"_init.m","w")),
+                   utility.Indenter(open(target+".m","w")),
     )
