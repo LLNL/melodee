@@ -166,7 +166,7 @@ class Scope:
         if name in self.units:
             return self.units[name]
         elif self.parent != None:
-            return self.parents.getUnit(name)
+            return self.parent.getUnit(name)
         else:
             raise KeyError(name)
     def hasUnit(self,name):
@@ -893,13 +893,13 @@ class MelodeeParser:
         ifSymbol = symbol
         
         #iterate over local symbols
-        for var in order(set(thenScope.symbols.keys()) | set(elseScope.symbols.keys())):
+        for var in set(thenScope.symbols.keys()) | set(elseScope.symbols.keys()):
             if not thenScope.hasSymbol(var) or not elseScope.hasSymbol(var):
                 continue
             #make sure the units match
             if thenScope.hasUnit(var) and elseScope.hasUnit(var):
                 unit = thenScope.getUnit(var)
-                if unit != elseScope.hasUnit(var):
+                if unit != elseScope.getUnit(var):
                     raise XXXSyntaxError("if condition for '%s' declares different units depending on branch." % var)
                 self.currentScope().setUnit(var, unit)
             elif not thenScope.hasUnit(var) and not elseScope.hasUnit(var):
@@ -907,12 +907,12 @@ class MelodeeParser:
             else:
                 raise XXXSyntaxError("if condition for '%s' declares different units depending on branch." % var)
             
-            if var in self.frozen:
+            if var in self.currentSubsystem().frozen:
                 XXXSyntaxError("Due to '%s' being used in an if condition, I don't know what it's default value should be." % var)
             choice = Choice(ifSymbol, thenScope.getSymbol(var), elseScope.getSymbol(var),
                             ASTUnit(unit, False))
             symbol = Symbol(var)
-            self.currentSubsystem.ssa[symbol] = choice
+            self.currentSubsystem().ssa[symbol] = choice
             choiceInstructions.append(symbol)
             self.currentScope().setSymbol(var, symbol)
 
@@ -1116,6 +1116,11 @@ class MelodeeParser:
             t.type = "ONE"
         return t
 
+    t_ignore_CPP_COMMENT = r'//.*?\n'
+    t_ignore_C_COMMENT = r'/\*(?:.|\n)*?\*/'
+    t_ignore_PYTHON_COMMENT = r'\#.*?\n'
+    t_ignore_MATLAB_COMMENT = r'%.*?\n'
+
     t_LEQ = r'<='
     t_GEQ = r'>='
     t_NEQ = r'!='
@@ -1127,10 +1132,6 @@ class MelodeeParser:
     t_DIVIDEEQ = r'/='
     t_EXPONEQ = r'^='
     
-    t_ignore_CPP_COMMENT = r'//.*?\n'
-    t_ignore_C_COMMENT = r'/\*.*?\*/'
-    t_ignore_PYTHON_COMMENT = r'\#.*?\n'
-    t_ignore_MATLAB_COMMENT = r'%.*?\n'
 
     precedence = (
         #("nonassoc", "UNITRESOLVE"),
