@@ -24,21 +24,23 @@
  * </license> 
  */
 
-shared ephemeral V;
-shared ephemeral Iion;
+integrate time {ms};
+
+shared V {mV};
+shared Iion {uA/uF};
 
 
 subsystem TT06 {
-   provides stable Cm {uF/cm^2} = 0.185;
-   provides stable F = 96485.3415;
-   provides stable R = 8314.472;
-   provides stable T = 310;
-   provides stable V_c {uL} = 0.016404;
+   provides Cm {uF/cm^2} = 0.185;
+   provides F {s*A/mol} = 96485.3415;
+   provides R {J/kmol/K} = 8314.472;
+   provides T {K} = 310;
+   provides V_c {uL} = 0.016404;
 
-   shared stable Na_o {mM};
-   shared ephemeral Na_i {mM};
-   shared ephemeral i_Naitot {uF/uA};
-   component sodium_dynamics {
+   shared Na_o {mM};
+   shared Na_i {mM};
+   shared i_Naitot {uF/uA};
+   subsystem sodium_dynamics {
       provides diffvar Na_i;
       Na_i.init = 10.355;
       //Na_i.diff = -1*(i_Na+i_b_Na+3*i_NaK+3*i_NaCa)/1*V_c*F*Cm;
@@ -46,10 +48,10 @@ subsystem TT06 {
       provides Na_o = 140;
    }
 
-   shared stable K_o {mM};
-   shared ephemeral K_i {mM};
-   shared ephemeral i_Kitot {uF/uA};
-   component potassium_dynamics {
+   shared K_o {mM};
+   shared K_i {mM};
+   shared i_Kitot {uF/uA};
+   subsystem potassium_dynamics {
       provides diffvar K_i;
       K_i.init = 138.4;
       //K_i.diff = -1*((i_K1+i_to+i_Kr+i_Ks+i_p_K+i_Stim)-2*i_NaK)/1*V_c*F*Cm;
@@ -57,9 +59,9 @@ subsystem TT06 {
       provides K_o = 5.4;
    }
 
-   shared ephemeral E_K {mV};
-   shared ephemeral E_Na {mV};
-   component reversal_potentials {
+   shared E_K {mV};
+   shared E_Na {mV};
+   subsystem reversal_potentials {
       provides E_K = R*T/F*log(K_o/K_i);
       provides E_Na = R*T/F*log(Na_o/Na_i);
    }
@@ -74,9 +76,9 @@ subsystem TT06 {
    }
 
    subsystem fast_sodium_current {
-      shared ephemeral h {1};
-      shared ephemeral j {1};
-      shared ephemeral m {1};
+      shared h {1};
+      shared j {1};
+      shared m {1};
       subsystem fast_sodium_current_h_gate {
          provides diffvar h;
          alpha_h = ((V < -40) ? 0.057*exp(-(V+80)/6.8) : 0);
@@ -125,8 +127,8 @@ subsystem TT06 {
    }
 
    subsystem rapid_time_dependent_potassium_current {
-      shared ephemeral Xr1 {1};
-      shared ephemeral Xr2 {1};
+      shared Xr1 {1};
+      shared Xr2 {1};
       subsystem rapid_time_dependent_potassium_current_Xr1_gate {
          provides diffvar Xr1;
          alpha_xr1 = 450/(1+exp((-45-V)/10));
@@ -151,7 +153,7 @@ subsystem TT06 {
    }
 
    subsystem slow_time_dependent_potassium_current {
-      shared ephemeral Xs {1};
+      shared Xs {1};
       subsystem slow_time_dependent_potassium_current_Xs_gate {
          provides diffvar Xs;
          alpha_xs = 1400/sqrt((1+exp((5-V)/6)));
@@ -173,8 +175,8 @@ subsystem TT06 {
    }
 
    subsystem transient_outward_current {
-      shared ephemeral r {1};
-      shared ephemeral s {1};
+      shared r {1};
+      shared s {1};
       subsystem transient_outward_current_r_gate {
          provides diffvar r;
          r_inf = 1/(1+exp((20-V)/6));
@@ -194,18 +196,18 @@ subsystem TT06 {
       provides accum i_Kitot += i_to;
    }
 
-   shared ephemeral i_Caitot {uA/uF};
+   shared i_Caitot {uA/uF};
    subsystem calcium_dynamics {
-      provides stable Ca_o {uM} = 2;
+      provides Ca_o {uM} = 2;
       provides diffvar Ca_i {uM};
       provides diffvar Ca_ss {uM};
       diffvar Ca_SR {uM};
       diffvar R_prime {1};
       subsystem L_type_Ca_current {
-         shared ephemeral d {1};
-         shared ephemeral f {1};
-         shared ephemeral f2 {1};
-         shared ephemeral fCass {1};
+         shared d {1};
+         shared f {1};
+         shared f2 {1};
+         shared fCass {1};
          subsystem L_type_Ca_current_d_gate {
             provides diffvar d;
             alpha_d = (1.4/(1+exp((-35-V)/13))+0.25);
@@ -307,3 +309,4 @@ subsystem TT06 {
 
    provides accum Iion {uA/uF} += i_Naitot+i_Kitot+i_Caitot;
 }
+
