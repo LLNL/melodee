@@ -25,6 +25,7 @@
 
 from xml.etree import cElementTree as ET
 import sys
+import re
 from utility import Indenter,order,unzip
 
 xmlns = {"http://www.cellml.org/cellml/1.0#" : "cellml",
@@ -93,6 +94,14 @@ def parseEquation(eqnElement, varToUnit):
 
     unit = varToUnit[lhs]
     return Equation(lhs, rhs, unit, depend, isDiff)
+
+def protectDivide(text):
+    ret = text
+    if not (ret[0] == '(' and ret[-1] == ')'):
+        unitless = re.sub(r'\{.*?\}','',ret)
+        if unitless.count('*') or unitless.count('/'):
+            ret = '(' + ret + ')'
+    return ret
 
 def parseRhs(rhsElement):
     multiplicitiveOps = { "times" : "*", "divide": "/" }
@@ -188,8 +197,13 @@ def parseRhs(rhsElement):
                 return ("-"+texts[0],allDependencies)
             else:
                 return ("("+"-".join(texts)+")",allDependencies)
-        elif op in multiplicitiveOps:
-            return (multiplicitiveOps[op].join(texts), allDependencies)
+        elif op == "times":
+            return ("*".join(texts), allDependencies)
+        elif op == "divide":
+            subs = []
+            subs.append(texts[0])
+            subs += [protectDivide(text) for text in texts[1:]]
+            return ('/'.join(subs),allDependencies)
         elif op in boolOps:
             return ((" "+ boolOps[op]+" ").join(texts), allDependencies)
         elif op == "not":
