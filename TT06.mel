@@ -29,33 +29,33 @@ integrate time {ms};
 shared V {mV};
 shared Iion {uA/uF};
 
-
 subsystem TT06 {
-   provides Cm {uF/cm^2} = 0.185;
-   provides F {s*A/mol} = 96485.3415;
-   provides R {J/kmol/K} = 8314.472;
+   provides Cm {uF} = 0.185;
+   provides F {C/mol} = 96485.3415;
+   provides R {J/K/kmol} = 8314.472;
    provides T {K} = 310;
-   provides V_c {uL} = 0.016404;
+   provides V_c {um^3} = 0.016404;
 
+   provides factor_fix {nA/A} = 1{uA/pA}/1{L/um^3};
    shared Na_o {mM};
    shared Na_i {mM};
-   shared i_Naitot {uF/uA};
+   shared i_Naitot {uA/uF};
    subsystem sodium_dynamics {
       provides diffvar Na_i;
       Na_i.init = 10.355;
-      //Na_i.diff = -1*(i_Na+i_b_Na+3*i_NaK+3*i_NaCa)/1*V_c*F*Cm;
-      Na_i.diff = -i_Naitot*V_c*F*Cm;
+      /* Na_i.diff = -1*(i_Na+i_b_Na+3*i_NaK+3*i_NaCa)/1*V_c*F*Cm; */
+      Na_i.diff = i_Naitot*Cm/V_c/F*factor_fix;
       provides Na_o = 140;
    }
 
    shared K_o {mM};
    shared K_i {mM};
-   shared i_Kitot {uF/uA};
+   shared i_Kitot {uA/uF};
    subsystem potassium_dynamics {
       provides diffvar K_i;
       K_i.init = 138.4;
       //K_i.diff = -1*((i_K1+i_to+i_Kr+i_Ks+i_p_K+i_Stim)-2*i_NaK)/1*V_c*F*Cm;
-      K_i.diff = -i_Kitot*V_c*F*Cm;
+      K_i.diff = -i_Kitot*Cm/V_c/F*factor_fix;
       provides K_o = 5.4;
    }
 
@@ -108,7 +108,7 @@ subsystem TT06 {
       }
       g_Na = 14.838;
       i_Na = g_Na*pow(m,3)*h*j*(V-E_Na);
-      provides accum i_Natot += i_Na;
+      provides accum i_Naitot += i_Na;
    }
 
    subsystem inward_rectifier_potassium_current {
@@ -116,7 +116,7 @@ subsystem TT06 {
       beta_K1 = (3*exp(0.0002*((V-E_K)+100))+exp(0.1*((V-E_K)-10)))/(1+exp(-0.5*(V-E_K)));
       g_K1 = 5.405;
       xK1_inf = alpha_K1/(alpha_K1+beta_K1);
-      i_Ki = g_K1*xK1_inf*sqrt(K_o/5.4)*(V-E_K);
+      i_K1 = g_K1*xK1_inf*sqrt(K_o/5.4)*(V-E_K);
       provides accum i_Kitot += i_K1;   
    }
    
@@ -163,6 +163,8 @@ subsystem TT06 {
          Xs.init = 0.0087;
          Xs.diff = (xs_inf-Xs)/tau_xs;
       }
+      P_kna = 0.03;
+      E_Ks = R*T/F*log((K_o+P_kna*Na_o)/(K_i+P_kna*Na_i));
       g_Ks = 0.392;
       i_Ks = g_Ks*pow(Xs,2)*(V-E_Ks);
       provides accum i_Kitot += i_Ks;
@@ -171,7 +173,7 @@ subsystem TT06 {
    subsystem sodium_background_current {
       g_bna = 0.00029;
       i_b_Na = g_bna*(V-E_Na);
-      provides accum i_Natot += i_b_Na;
+      provides accum i_Naitot += i_b_Na;
    }
 
    subsystem transient_outward_current {
@@ -203,6 +205,10 @@ subsystem TT06 {
       provides diffvar Ca_ss {uM};
       diffvar Ca_SR {uM};
       diffvar R_prime {1};
+      shared i_b_Ca {uA/uF};
+      shared i_p_Ca {uA/uF};
+      shared i_CaL {uA/uF};
+      shared i_NaCa {uA/uF};
       subsystem L_type_Ca_current {
          shared d {1};
          shared f {1};
@@ -240,13 +246,13 @@ subsystem TT06 {
             f.diff = (f_inf-f)/tau_f;
          }
          g_CaL = 0.0000398;
-         i_CaL = g_CaL*d*f*f2*fCass*4*(V-15)*pow(F,2)/R*T*(0.25*Ca_ss*exp(2*(V-15)*F/R*T)-Ca_o)/(exp(2*(V-15)*F/R*T)-1);
+         provides i_CaL = g_CaL*d*f*f2*fCass*4*(V-15)*pow(F,2)/R*T*(0.25*Ca_ss*exp(2*(V-15)*F/R*T)-Ca_o)/(exp(2*(V-15)*F/R*T)-1);
          provides accum i_Caitot += i_CaL;
       }
       subsystem calcium_pump_current {
          K_pCa = 0.0005;
          g_pCa = 0.1238;
-         i_p_Ca = g_pCa*Ca_i/(Ca_i+K_pCa);
+         provides i_p_Ca = g_pCa*Ca_i/(Ca_i+K_pCa);
          provides accum i_Caitot += i_p_Ca;
       }
       subsystem sodium_calcium_exchanger_current {
@@ -256,14 +262,14 @@ subsystem TT06 {
          Km_Nai = 87.5;
          alpha = 2.5;
          gamma = 0.35;
-         i_NaCa = K_NaCa*(exp(gamma*V*F/R*T)*pow(Na_i,3)*Ca_o-exp((gamma-1)*V*F/R*T)*pow(Na_o,3)*Ca_i*alpha)/(pow(Km_Nai,3)+pow(Na_o,3))*(Km_Ca+Ca_o)*(1+K_sat*exp((gamma-1)*V*F/R*T));
+         provides i_NaCa = K_NaCa*(exp(gamma*V*F/R*T)*pow(Na_i,3)*Ca_o-exp((gamma-1)*V*F/R*T)*pow(Na_o,3)*Ca_i*alpha)/(pow(Km_Nai,3)+pow(Na_o,3))*(Km_Ca+Ca_o)*(1+K_sat*exp((gamma-1)*V*F/R*T));
          provides accum i_Naitot += 3*i_NaCa;
          provides accum i_Caitot -= 2*i_NaCa;
       }
       subsystem calcium_background_current {
          g_bca = 0.000592;
          E_Ca = 0.5*R*T/F*log(Ca_o/Ca_i);
-         i_b_Ca = g_bca*(V-E_Ca);
+         provides i_b_Ca = g_bca*(V-E_Ca);
          provides accum i_Caitot += i_b_Ca;
       }
       Buf_c = 0.2;
@@ -307,6 +313,6 @@ subsystem TT06 {
       Ca_ss.diff = Ca_ss_bufss*((-1*i_CaL*Cm/2*1*V_ss*F+i_rel*V_sr/V_ss)-i_xfer*V_c/V_ss);
    }
 
-   provides accum Iion {uA/uF} += i_Naitot+i_Kitot+i_Caitot;
+   provides accum Iion += i_Naitot+i_Kitot+i_Caitot;
 }
 
