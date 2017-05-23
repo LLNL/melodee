@@ -1042,6 +1042,11 @@ class MelodeeParser:
         r'\n+'
         t.lexer.lineno += len(t.value)
 
+    def t_ignore_C_COMMENT(self, t):
+        r'/\*(?:.|\n)*?\*/'
+        #count the number of new lines
+        t.lexer.lineno += t.value.count("\n")
+        
     def t_error(self, t):
         print("Illegal character '%s'" % t.value[0])
         t.lexer.skip(1)
@@ -1116,10 +1121,9 @@ class MelodeeParser:
             t.type = "ONE"
         return t
 
-    t_ignore_CPP_COMMENT = r'//.*?\n'
-    t_ignore_C_COMMENT = r'/\*(?:.|\n)*?\*/'
-    t_ignore_PYTHON_COMMENT = r'\#.*?\n'
-    t_ignore_MATLAB_COMMENT = r'%.*?\n'
+    t_ignore_CPP_COMMENT = r'//.*?(?=\n)'
+    t_ignore_PYTHON_COMMENT = r'\#.*?(?=\n)'
+    t_ignore_MATLAB_COMMENT = r'%.*?(?=\n)'
 
     t_LEQ = r'<='
     t_GEQ = r'>='
