@@ -317,13 +317,13 @@ class Component:
         for var in order(self.outputs & allDiffvars):
             out("provides diffvar %s {%s};" , var, self.lookupUnit(var))
         for var in order(self.outputs & allConstants):
-            out("provides stable %s {%s};", var, self.lookupUnit(var))
+            out("provides %s {%s};", var, self.lookupUnit(var))
         for var in order(self.outputs - allDiffvars - allConstants):
-            out("provides ephemeral %s {%s};", var, self.lookupUnit(var))
+            out("provides %s {%s};", var, self.lookupUnit(var))
         for var in order((allDecl - allConstants) - self.outputs - self.inputs - localDiffvars):
-            out("shared ephemeral %s {%s};", var, self.lookupUnit(var))
+            out("shared %s {%s};", var, self.lookupUnit(var))
         for var in order((allDecl & allConstants) - self.outputs - self.inputs - localDiffvars):
-            out("shared stable %s {%s};", var, self.lookupUnit(var))
+            out("shared %s {%s};", var, self.lookupUnit(var))
         for var in order(localDiffvars):
             out("diffvar %s {%s};", var, self.lookupUnit(var))
             
