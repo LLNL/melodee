@@ -38,9 +38,10 @@ import units
 
 #############################################################################
 
-class XXXSyntaxError:
+class XXXSyntaxError(SyntaxError):
     def __init__(self, text):
         self.text = text
+        print text
     def __str__(self):
         return self.text
 
@@ -1700,17 +1701,19 @@ class MelodeeParser:
         '''empty :'''
         pass
 
-    #def p_statementRecovery(self,p):
-    #    '''subSystemStatement : error ';' '''
-    #    print "moving on from syntax error on line number "+str(self.lexer.lineno)
-    #def p_subsystemRecovery(self,p):
-    #    '''subSystemDefinition : SUBSYSTEM NAME '{' error '}' '''
-    #    print "moving on from syntax error on line number "+str(self.lexer.lineno)
+    def p_statementRecovery(self,p):
+        '''subSystemStatement : error ';' '''
+        print "moving on from syntax error on line number "+str(p.lineno(2))
+    def p_subsystemRecovery(self,p):
+        '''subSystemDefinition : subSystemBegin error '}' '''
+        print "moving on from syntax error on line number "+str(p.lineno(3))
+        self.scopeStack.pop()
+        thisEncapsulation = self.encapsulationStack.pop()
     
-    def p_error(self,p):
-        if p:
-            print "SyntaxError on line number "+str(self.lexer.lineno)+" at token", p.type, p.value
-            self.parser.errok()
+    #def p_error(self,p):
+    #    if p:
+    #        print "SyntaxError on line number "+str(self.lexer.lineno)+" at token", p.type, p.value
+    #        self.parser.errok()
 
 
     #def p_subSystemStatement_renameStatement(self, p):
