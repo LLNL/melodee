@@ -792,7 +792,7 @@ class MelodeeParser:
 
             if operand == '+=' or operand == '-=':
                 if operand == '-=':
-                    rhs = AST(sympy.Mul(sympy.Integer(-1),rhs.sympy, rhs.astUnit))
+                    rhs = AST(sympy.Mul(sympy.Integer(-1),rhs.sympy), rhs.astUnit)
                 rhs = AST(sympy.Add(lhs.sympy,rhs.sympy), self.checkExactUnits(lhs.astUnit,rhs.astUnit))
             elif operand == '*=' or operand == '/=':
                 if operand == "/=":
@@ -1604,7 +1604,8 @@ class MelodeeParser:
         rhs = p[3]
         if p[2] == '/':
             rhs = AST(sympy.Pow(rhs.sympy,sympy.Integer(-1)), rhs.astUnit ** -1)
-        p[0] = AST(sympy.Mul(lhs.sympy,rhs.sympy), lhs.astUnit*rhs.astUnit)
+        ret = AST(sympy.Mul(lhs.sympy,rhs.sympy), lhs.astUnit*rhs.astUnit)
+        p[0] = ret
 
     def p_unaryExpr_pass(self, p):
         '''unaryExpr : unitLabelExpr'''
