@@ -22,6 +22,8 @@ Requirements:
 * PLY - for LR parsing
 * sympy - for symobolic expression manipulation
 
+To test simply, type
+./matlabGenerator.py modifiedModel HH.mel
 
 -----------------
 
