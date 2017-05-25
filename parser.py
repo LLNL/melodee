@@ -849,7 +849,7 @@ class MelodeeParser:
         #parameter checking code.
         #FIXME
         nameDepend = set([symbol.name for symbol in rhs.dependencies()])
-        newlyReadParams = (subsystem.params | nameDepend) - subsystem.frozen
+        newlyReadParams = (subsystem.params & nameDepend) - subsystem.frozen
         newlyReadParams -= set([var])
         subsystem.frozen |= newlyReadParams
         
@@ -1463,7 +1463,7 @@ class MelodeeParser:
 
     def p_elseIfCond(self, p):
         '''elseIfCond : ELSEIF '(' realExpr ')' '''
-        p[0] = p[4]
+        p[0] = p[3]
     def p_elseOpt_continue(self, p):
         '''elseOpt : ifScopeBegin elseIfCond thenBody elseOpt'''
         self.processIfCondition(p[2],p[3],p[4])
@@ -1551,7 +1551,7 @@ class MelodeeParser:
         unit = self.si.get(unitName)
         ii=0
         for name in p[3]:
-            self.enumerations[name] = AST(textToAST(str(ii), ASTUnit(unit, False)))
+            self.enumerations[name] = textToAST(str(ii), ASTUnit(unit, False))
         p[0] = unit
     def p_unitExpr_1(self, p):
         '''unitExpr : ONE'''
