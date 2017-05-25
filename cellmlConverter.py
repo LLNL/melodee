@@ -81,13 +81,13 @@ def parseEquation(eqnElement, varToUnit):
 
     isDiff = 0
     if lhsElement.tag == "ci":
-        lhs = lhsElement.text
+        lhs = lhsElement.text.strip()
     else:
         assert(lhsElement.tag == "apply")
         assert(lhsElement.find("diff") != None)
-        assert(lhsElement.find("bvar/ci").text == "time")
+        assert(lhsElement.find("bvar/ci").text.strip() == "time")
         assert(lhsElement.find("ci") != None)
-        lhs = lhsElement.find("ci").text
+        lhs = lhsElement.find("ci").text.strip()
         isDiff=1
 
     (rhs, depend) = parseRhs(rhsElement)
