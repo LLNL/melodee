@@ -105,7 +105,7 @@ subsystem TT06 {
          alpha_m = 1/(1+exp((-60-V)/5));
          beta_m = (0.1/(1+exp((V+35)/5))+0.1/(1+exp((V-50)/200)));
          m_inf = 1/pow((1+exp((-56.86-V)/9.03)),2);
-         tau_m = 1*alpha_m*beta_m;
+         provides tau_m {ms} = 1*alpha_m*beta_m;
          m.init = 0.00155;
          m.diff = (m_inf-m)/tau_m;
       }
