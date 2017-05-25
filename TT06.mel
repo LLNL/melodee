@@ -28,8 +28,11 @@ integrate time {ms};
 
 shared V {mV};
 shared Iion {uA/uF};
+shared V_init {mV};
 
 subsystem TT06 {
+   provides V_init = -86.709;
+
    provides Cm {uF} = 0.185;
    provides F {C/mol} = 96485.3415;
    provides R {J/K/kmol} = 8314.472;

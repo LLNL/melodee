@@ -23,7 +23,7 @@ Requirements:
 * sympy - for symobolic expression manipulation
 
 To test simply, type
-./matlabGenerator.py modifiedModel HH.mel
+./matlabGenerator.py modifiedModel,bclDefault HH.mel singleCell.mel
 
 -----------------
 

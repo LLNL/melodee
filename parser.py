@@ -228,14 +228,19 @@ class Encapsulation:
         self.children = {}
         self.junctions = {}
         self.ports = {}
+        self.externalJunctions = set()
     def hasJunction(self, name):
         return name in self.junctions
     def getJunction(self, name):
         return self.junctions[name]
-    def setJunction(self, name, junction):
+    def setJunction(self, name, junction, external=False):
         self.junctions[name] = junction
+        if external:
+            self.externalJunctions.add(junction)
     def clearJunctions(self):
         self.junctions = {}
+    def isExternal(self, junction):
+        return junction in self.externalJunctions
     def addChild(self, name, encapsulation):
         if name in self.children:
             raise MultipleAssignmentDisallowed(name)
@@ -264,11 +269,13 @@ class Encapsulation:
             other.junctions[name] = newJuncFromOld[oldJunction]
         for (name,oldPort) in self.ports.items():
             other.ports[name] = newPortFromOld[oldPort]
+        for oldJunction in self.externalJunctions:
+            other.externalJunctions.add(newJuncFromOld[oldJunction])
         return other
     def allLocalPorts(self):
         return set(self.ports.values())
-    def allLocalJunctions(self):
-        return set(self.junctions.values())
+    def allLocalInternalJunctions(self):
+        return set(self.junctions.values()) - self.externalJunctions
     def allEncap(self, ret=None):
         if ret==None:
             ret = []
@@ -276,6 +283,28 @@ class Encapsulation:
         for child in self.children.values():
             child.allEncap(ret)
         return ret
+    def nameFromJunction(self, lookupJunc, connections):
+        #print "---", lookupJunc
+        #print "---", self.junctions
+        for (name,junction) in self.junctions.items():
+            if junction==lookupJunc:
+                return name
+        #print "---", self.ports    
+        for (name,port) in self.ports.items():
+            junction = connections.junctionFromPort(port)
+            if junction==lookupJunc:
+                return name
+        possibleNames = set()
+        retName = None
+        for child in self.children.values():
+            possibleName = child.nameFromJunction(lookupJunc,connections)
+            if possibleName != None:
+                possibleNames.add(possibleName)
+                retName = possibleName
+        if len(possibleNames) == 1:
+            return retName
+        else:
+            return None
     def nameEncapFromPort(self, ret=None):
         if ret==None:
             ret={}
@@ -284,10 +313,10 @@ class Encapsulation:
         for child in self.children.values():
             child.nameEncapFromPort(ret)
         return ret
-    def allJunctions(self):
-        ret = self.allLocalJunctions()
+    def allInternalJunctions(self):
+        ret = self.allLocalInternalJunctions()
         for child in self.children.values():
-            ret |= child.allJunctions()
+            ret |= child.allInternalJunctions()
         return ret
     def allPorts(self):
         ret = self.allLocalPorts()
@@ -313,7 +342,7 @@ class Encapsulation:
         return var in self.subsystem.accums
     def instructions(self):
         return self.subsystem.scope.instructions
-
+    
 def fullName(tupleName):
     return ":".join(tupleName)
 
@@ -352,7 +381,7 @@ class ConsolidatedSystem:
         printer(self.instructions)
                 
     
-    def __init__(self, timeUnit, externalJunctions, rootEncap, connections):
+    def __init__(self, timeUnit, rootEncap, connections):
 
         nameFromEncap={}
         def nameAllEncaps(encap, myName=(), retval=None):
@@ -369,8 +398,6 @@ class ConsolidatedSystem:
         for (encap, tupName) in nameFromEncap.items():
             for (name,junction) in encap.junctions.items():
                 symbolFromJunction[junction] = Symbol(fullName(tupName + (name,)))
-        for (name, junction) in externalJunctions.items():
-            symbolFromJunction[junction] = Symbol(fullName(("_external",name)))
                 
         # deal with the assignment issues.
         isAccum = set()
@@ -396,6 +423,8 @@ class ConsolidatedSystem:
         for encap in allEncap:
             if encap.subsystem.time != None:
                 timeName = encap.subsystem.time
+                if timeUnit == None:
+                    timeUnit = encap.subsystem.getUnit(timeName)
                 break
         if timeName != None:
             timeSym = Symbol(timeName)
@@ -446,7 +475,7 @@ class ConsolidatedSystem:
                 else:
                     newSym = symbolMap.get(encap, oldSym,tupName)
                     convertedInstructions.append(newSym)
-                    self.ssa[newSym] = AST(sympy.Mul(timeSym,oldUnit.convertTo(newUnit)),ASTUnit(timeUnit,False))
+                    self.ssa[newSym] = AST(sympy.Mul(timeSym,oldUnit.convertTo(timeUnit)),ASTUnit(timeUnit,False))
             #process other named variables
             #for oldSym in subsystem.allSymbols():
             #    symbolMap.get(encap,oldSym,tupName)
@@ -468,12 +497,13 @@ class ConsolidatedSystem:
         #get the inputs/outputs
         self.inputs = set()
         self.outputs = set()
-        for (name,junction) in externalJunctions.items():
-            symbol = symbolFromJunction[junction]
-            if junction in isAssign or junction in isAccum:
-                self.outputs.add(symbol)
-            else:
-                self.inputs.add(symbol)
+        for (name,junction) in rootEncap.junctions.items():
+            if rootEncap.isExternal(junction):
+                symbol = symbolFromJunction[junction]
+                if junction in isAssign or junction in isAccum:
+                    self.outputs.add(symbol)
+                else:
+                    self.inputs.add(symbol)
         # fix time
         self.time = timeSym
 
@@ -683,7 +713,6 @@ class MelodeeParser:
         self.tempCount = 0
         self.enumerations = {}
         self.encapsulationStack = [Encapsulation()]
-        self.externalJuncFromEncapName = {}
         self.timeUnitFromEncapName = {}
         self.clearEnvironment()
 
@@ -692,9 +721,8 @@ class MelodeeParser:
         self.parser.parse(text)
     def getModel(self, name):
         rootEncap = self.encapsulationStack[0].children[name]
-        externalJunctions = self.externalJuncFromEncapName[name]
         timeUnit = self.timeUnitFromEncapName[name]
-        return ConsolidatedSystem(timeUnit,externalJunctions,rootEncap,self.connections)
+        return ConsolidatedSystem(timeUnit,rootEncap,self.connections)
         
     def clearEnvironment(self):
         self.timeVar = None
@@ -929,12 +957,15 @@ class MelodeeParser:
     
     def processUseStatement(self, childName, encap, removeList, exportList):
         newEncap = encap.copy(self.connections)
+        # delete from the encap as necessary
         for removeItem in removeList:
             removeEncap = newEncap
             while len(removeItem) > 1:
                 removeEncap = removeEncap.children[removeItem[0]]
                 removeItem = removeItem[1:]
             removeEncap.removeChild(removeItem[0], self.connections)
+        # do the exporting that has been manually specified.
+        junctionFromExportedName = {}
         for item in exportList:
             (speccedName, exportName) = item
             exportEncap = newEncap
@@ -948,19 +979,81 @@ class MelodeeParser:
                 newJunction = self.connections.junctionFromPort(exportEncap.ports[name])
             else:
                 raise NoEncapsulationError(name)
+            if exportName in junctionFromExportedName:
+                raise XXXSyntaxError('Cannot export "%s" from "%s": name is already exported.' % (exportName,childName))
+            junctionFromExportedName[exportName] = newJunction
+        # find all the ports
+        allPorts = newEncap.allPorts()
+        # split those ports up between input, output, and accum ports
+        # compute the junctions for each of the port lists
+        nameEncapFromPort = newEncap.nameEncapFromPort()
+        inputJunctions = set()
+        outputJunctions = set()
+        accumJunctions = set()
+        for port in allPorts:
+            junction = self.connections.junctionFromPort(port)
+            (name, subEncap) = nameEncapFromPort[port]
+            if subEncap.isInput(name):
+                inputJunctions.add(junction)
+            elif subEncap.isOutput(name):
+                outputJunctions.add(junction)
+            elif subEncap.isAccum(name):
+                accumJunctions.add(junction)
+            else:
+                assert(False)
+
+        # get a list of junctions declared externally to the encapsulation.
+        internalJunctions = newEncap.allInternalJunctions()
+        allJunctions = inputJunctions|outputJunctions|accumJunctions
+        externalJunctions = allJunctions - internalJunctions
+        # figure out the implicitly exported junctions
+        danglingInputJunctions = inputJunctions - outputJunctions - accumJunctions
+        exportedJunctions = set(junctionFromExportedName.values())
+        implicitlyExportedJunctions = (danglingInputJunctions | externalJunctions) - exportedJunctions
+        #print "+++++", childName
+        #print danglingInputJunctions
+        #print externalJunctions
+        #print junctionFromExportedName
+        #print newEncap.junctions
+        #print newEncap.externalJunctions
+        
+        # get names for each of the implicitly exported junctions
+        for junction in implicitlyExportedJunctions:
+            #find the name for this junction
+            name = newEncap.nameFromJunction(junction, self.connections)
+            if name == None:
+                allNames = set()
+                for port in self.connections.portsFromJunction(junction):
+                    (name,encap) = nameEncapFromPort[port]
+                    allNames.add(name)
+                errorMessage = "Can't get a unique name for an implicily exported junction in child \"%s\".\n" % childName
+                errorMessage += "Please export manually. Candidate names are:\n"
+                for name in allNames:
+                    errorMessage += name + "\n"
+                raise XXXSyntaxError(errorMessage)
+            #check for possible name conflicts
+            if name in junctionFromExportedName:
+                raise XXXSyntaxError('Cannot implicitly export "%s" from "%s": another variable has already been exported with this name.' % (name,childName))
+            # add the export
+            junctionFromExportedName[name] = junction
+
+        # export the junctions
+        for (exportName,newJunction) in junctionFromExportedName.items():
             (exists, oldJunction) = self.searchForJunction(exportName)
             if not exists:
                 self.currentEncapsulation().setJunction(exportName, newJunction)
             else:
                 self.connections.substituteJunction(newJunction,oldJunction)
+
         self.currentEncapsulation().addChild(childName, newEncap)
 
-    def checkConnections(self, topEncap, encap):
+    def checkConnections(self, rootEncap):
         #Get a list of all internal junctions
-        internalJunctions = encap.allJunctions()
+        internalJunctions = rootEncap.allInternalJunctions()
         #make a mapping between ports and encapsulation/name pairs
-        nameEncapFromPort = encap.nameEncapFromPort()
+        nameEncapFromPort = rootEncap.nameEncapFromPort()
         #for each internal junction
+        errors = ""
         for thisJunction in internalJunctions:
             #get the ports for this junction
             thesePorts = self.connections.portsFromJunction(thisJunction)
@@ -981,9 +1074,11 @@ class MelodeeParser:
                         accums.append((var,encap))
                 assert(len(accums) <= len(outputs))
                 if len(outputs) < 1:
-                    raise XXXSyntaxError("No definition for %s in %s"  %(var, encap))
+                    errors += "No definition for %s in %s\n"  %(var, rootEncap)
                 if len(outputs) > 1 and len(outputs) != len(accums):
-                    raise XXXSyntaxError("Can't mix output and accum for %s" % var)
+                    errors += "Can't mix output and accum for %s" % var
+        if errors:
+            raise XXXSyntaxError(errors)
         
     def nodim(self):
         return ASTUnit(self.si.get("1"), False)
@@ -1166,19 +1261,20 @@ class MelodeeParser:
         '''
         pass
     def p_topLevelSubsystem(self, p):
-        '''topLevelStatement : topLevelSubsystemBegin subSystemDefinition'''
-        topEncap = self.encapsulationStack.pop()
-        (name, encap) = p[2]
+        '''topLevelStatement : subSystemBegin topLevelEnvironmentFix subSystemStatementsOpt '}' '''
+        name = p[1]
+        encap = self.closeSubsystem()
         self.timeUnitFromEncapName[name] = self.timeUnit
-        self.externalJuncFromEncapName[name] = topEncap.junctions
         self.currentEncapsulation().addChild(name,encap)
-        self.checkConnections(topEncap, encap)
+        self.checkConnections(encap)
         
-    def p_topLevelSubsystemBegin(self, p):
-        '''topLevelSubsystemBegin : empty'''
-        thisTopEncap = self.currentEncapsulation().copy(self.connections)
-        self.encapsulationStack.append(thisTopEncap)
-        p[0] = thisTopEncap
+    def p_topLevelEnvironmentFix(self, p):
+        '''topLevelEnvironmentFix : empty'''
+        thisEncap = self.currentEncapsulation()
+        topEncap = self.encapsulationStack[-2]
+        for (name,oldJunction) in topEncap.junctions.items():
+            newJunction = self.connections.makeJunction(oldJunction.rawUnit)
+            thisEncap.setJunction(name,newJunction,external=True)
         
     def p_integrateStatement(self, p):
         '''integrateStatement : INTEGRATE var unitDef ';'
@@ -1201,11 +1297,13 @@ class MelodeeParser:
 
     def p_subSystemDefinition(self, p):
         '''subSystemDefinition : subSystemBegin subSystemStatementsOpt '}' '''
-        self.scopeStack.pop()
-        thisEncapsulation = self.encapsulationStack.pop()
-        thisSubsystem = thisEncapsulation.subsystem
-        p[0] = (p[1],thisEncapsulation)
+        p[0] = (p[1],self.closeSubsystem())
 
+    def closeSubsystem(self):
+        self.scopeStack.pop()
+        thisEncap = self.encapsulationStack.pop()
+        return thisEncap    
+        
     def p_subSystemBegin(self, p):
         '''subSystemBegin : SUBSYSTEM NAME '{' '''
         thisName = p[2]

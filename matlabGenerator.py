@@ -185,7 +185,16 @@ if __name__=="__main__":
     models = {}
     for filename in sys.argv:
         p.parse(open(filename,"r").read())
-    
+    originalTargets = target.split(",")
+    if len(originalTargets) > 1:
+        target = "_".join(originalTargets)
+        targetModel = ""
+        targetModel += "subsystem %s {\n" % target
+        for model in originalTargets:
+            targetModel += "   use %s;\n" % model
+        targetModel += "}\n"
+        p.parse(targetModel)
+        
     generateMatlab(p.getModel(target), target,
                    #utility.Indenter(sys.stdout),
                    #utility.Indenter(sys.stdout),
