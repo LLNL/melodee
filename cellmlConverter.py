@@ -611,5 +611,8 @@ if __name__=="__main__":
     
     out = Indenter(sys.stdout)
     for var in root.inputs:
-        out("shared ephemeral %s {%s};", var, printUnit(rootVarToUnit[var]))
+        if var == "time" or var == "t":
+            out("integrate %s {%s};", var, printUnit(rootVarToUnit[var]))
+        else:
+            out("shared ephemeral %s {%s};", var, printUnit(rootVarToUnit[var]))
     root.toCode(out)
