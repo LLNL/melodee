@@ -43,28 +43,42 @@ subsystem noStim {
   iStim = 0;
 }
 
+shared bcl_time {ms};
 
-subsystem bclStim {
+subsystem bcl_time {
+  provides bcl_time;
+
   param offset {ms} = 0;
   param n {1} = 1;
   param bcl {ms} = 1000;
+
+  if (t < offset) {
+     bcl_time = bcl*1000+t-offset;
+  } else { 
+    beat = floor((t-offset)/bcl);
+    if (beat >= n) {
+      beat = n-1;
+    }
+    bcl_time = t-offset - beat*bcl;
+  }
+}
+
+shared stim_time {ms};
+
+subsystem squareStim {
   param duration {ms} = 1;
   param strength {uA/uF} = 60;
 
   provides iStim = 0;
-  if (t >= offset) {
-    beat = floor((t-offset)/bcl);
-    if (beat < n)
-    {
-      bcl_time = t-offset - beat*bcl;
-      if (bcl_time < duration) {
-        iStim = strength;
-      }
-    }
+  if (stim_time < duration) {
+     iStim = strength;
   }
 }
 
 subsystem bclDefault {
   use Vm;
-  use bclStim;
+  use bcl_time;
+  use squareStim {
+    export stim_time as bcl_time;
+  }
 }
