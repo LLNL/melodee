@@ -728,6 +728,7 @@ class MelodeeParser:
         self.timeVar = None
         self.timeUnit = None
         self.encapsulationStack[0].clearJunctions()
+        self.lexer.lineno = 1
         
     def currentSubsystem(self):
         return self.currentEncapsulation().subsystem
@@ -953,7 +954,7 @@ class MelodeeParser:
         for ii in range(len(self.encapsulationStack)-1,-1,-1):
             if name in self.encapsulationStack[ii].children:
                 return self.encapsulationStack[ii].children[name]
-        raise NoEncapsulationError(name)
+        raise XXXSyntaxError("Can't find encapsulation '%s'." % name)
     
     def processUseStatement(self, childName, encap, removeList, exportList):
         newEncap = encap.copy(self.connections)
@@ -978,7 +979,7 @@ class MelodeeParser:
             elif name in exportEncap.ports:
                 newJunction = self.connections.junctionFromPort(exportEncap.ports[name])
             else:
-                raise NoEncapsulationError(name)
+                raise XXXSyntaxError("Can't find variable '%s' for exporting." % name)
             if exportName in junctionFromExportedName:
                 raise XXXSyntaxError('Cannot export "%s" from "%s": name is already exported.' % (exportName,childName))
             junctionFromExportedName[exportName] = newJunction
@@ -1490,22 +1491,27 @@ class MelodeeParser:
         exportList = p[3]
         self.processUseStatement(name, encap, removeList, exportList)
     def p_useEncapsulationSpec_simpleSamename(self, p):
-        '''useEncapsulationSpec : USE NAME useRemoveListOpt'''
-        lookupName = p[2]
+        '''useEncapsulationSpec : useBegin useRemoveListOpt'''
+        (lookupName, encap) = p[1]
         useName = lookupName
-        p[0] = (useName, self.lookupEncapsulation(lookupName), p[3])
+        p[0] = (useName, encap, p[2])
     def p_useEncapsulationSpec_simpleRenamed(self, p):
-        '''useEncapsulationSpec : USE NAME useRemoveListOpt AS NAME'''
+        '''useEncapsulationSpec : useBegin useRemoveListOpt AS NAME'''
+        (lookupName, encap) = p[1]
+        useName = p[4]
+        p[0] = (useName, self.lookupEncapsulation(lookupName), p[2])
+    def p_useBegin_simple(self, p):
+        '''useBegin : USE NAME '''
         lookupName = p[2]
-        useName = p[5]
-        p[0] = (useName, self.lookupEncapsulation(lookupName), p[3])
-    def p_useEncapsulationSpec_complex(self, p):
-        '''useEncapsulationSpec : USE NAME '.' speccedName useRemoveListOpt AS NAME '''
-        useName = p[7]
-        retEncap = self.lookupEncapsulation(p[2])
+        p[0] = (lookupName, self.lookupEncapsulation(lookupName))
+    def p_useBegin_complex(self, p):
+        '''useBegin : USE NAME '.' speccedName '''
+        lookupName = p[2]
+        retEncap = self.lookupEncapsulation(lookupName)
         for name in p[4]:
-            retEncap = retEncap.children[name]
-        p[0] = (useName, retEncap, p[5])
+            lookupName = name
+            retEncap = retEncap.children[lookupName]
+        p[0] = (lookupName, retEncap)
     def p_useRemoveListOpt_empty(self, p):
         '''useRemoveListOpt : empty'''
         p[0] = []
@@ -1808,7 +1814,9 @@ class MelodeeParser:
         print "moving on from syntax error on line number "+str(p.lineno(3))
         self.scopeStack.pop()
         thisEncapsulation = self.encapsulationStack.pop()
-    
+    def p_useRecovery(self,p):
+        '''useBlockStatement : error ';' '''
+        print "moving on from syntax error on line number "+str(p.lineno(3))
     #def p_error(self,p):
     #    if p:
     #        print "SyntaxError on line number "+str(self.lexer.lineno)+" at token", p.type, p.value
