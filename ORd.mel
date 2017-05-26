@@ -626,6 +626,6 @@ subsystem ORd {
 
    //// Membrane Potential
    ////
-   provides accum Iion += INa+INaL+Ito+ICaL+ICaNa+ICaK+IKr+IKs+IK1+INaCa_i+INaCa_ss+INaK+INab+IKb+IpCa+ICab;
+   provides Iion += INa+INaL+Ito+ICaL+ICaNa+ICaK+IKr+IKs+IK1+INaCa_i+INaCa_ss+INaK+INab+IKb+IpCa+ICab;
 }
 

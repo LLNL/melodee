@@ -40,7 +40,7 @@ subsystem HH {
       E_L {mV} = (E_R+10.613{mV});
       param g_L {mS/cm^2} = 0.3;
       i_L {uA/cm^2} = g_L*(V-E_L);
-      provides accum Iion_area += i_L;
+      provides Iion_area += i_L;
    }
    subsystem potassium_channel {
       shared n {1};
@@ -54,7 +54,7 @@ subsystem HH {
       E_K {mV} = (E_R-12{mV});
       g_K {mS/cm^2} = 36;
       i_K {uA/cm^2} = g_K*n^4*(V-E_K);
-      provides accum Iion_area += i_K;
+      provides Iion_area += i_K;
    }
    subsystem sodium_channel {
       shared h {1};
@@ -75,11 +75,11 @@ subsystem HH {
       }
       g_Na {mS/cm^2} = 120;
       i_Na {uA/cm^2} = g_Na*m^3*h*(V-E_Na);
-      provides accum Iion_area += i_Na;
+      provides Iion_area += i_Na;
    }
    provides V_init = -75;
    param Cm {uF/cm^2} = 1;
-   provides accum Iion += Iion_area/Cm;
+   provides Iion += Iion_area/Cm;
 }
 
 subsystem newINa {
@@ -110,7 +110,7 @@ subsystem newINa {
 
   param g_Na {mS/cm^2} = 14.838;
   i_Na = g_Na*pow(m,3)*h*j*(V-E_Na);
-  provides accum i_Natot {uA/cm^2} += i_Na;
+  provides i_Natot {uA/cm^2} += i_Na;
 }
 
 subsystem modifiedModel {

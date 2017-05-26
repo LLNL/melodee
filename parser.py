@@ -812,7 +812,8 @@ class MelodeeParser:
 
         if operand != '=':
             if not scope.hasSymbol(var):
-                if var in subsystem.accums:
+                if var in subsystem.outputs and (operand == "+=" or operand == "-="):
+                    subsystem.accums.add(var)
                     lhs = textToAST("0",ASTUnit(scope.getUnit(var),False))
                 else:
                     raise XXXSyntaxError("'%s' used before assignment."%var)
@@ -1155,7 +1156,6 @@ class MelodeeParser:
         "true" : "TRUE",
         "false" : "FALSE",
         "param" : "PARAM",
-        "accum" : "ACCUM",
         "diffvar" : "DIFFVAR",
         "diff" : "DIFF",
         "init" : "INIT",
@@ -1324,24 +1324,21 @@ class MelodeeParser:
         self.currentEncapsulation().addChild(name,encap)
 
     def p_subSystemStatement_accum(self, p):
-        '''subSystemStatement : PROVIDES ACCUM var unitOpt accumDefOpt ';' '''
-        junction = self.markProvides(p[3],p[4])
-        self.currentEncapsulation().ports[p[3]] = self.connections.makePort(junction)
-        #mark that junction as an accum junction
-        #FIXME
-        #mark the variable as an accum
-        self.currentSubsystem().accums.add(p[3])
+        '''subSystemStatement : PROVIDES var unitOpt providesAssignOpt ';' '''
+        junction = self.markProvides(p[2],p[3])
+        self.currentEncapsulation().ports[p[2]] = self.connections.makePort(junction)
         #if there's a definition, process it.
-        if p[5] != None:
-            (operand, rhs) = p[5]
-            self.processAssignment(p[3],operand, rhs)
+        if p[4] != None:
+            (operand, rhs) = p[4]
+            self.processAssignment(p[2],operand, rhs)
         
-    def p_accumDefOpt_empty(self, p):
-        '''accumDefOpt : empty'''
+    def p_providesAssignOpt_empty(self, p):
+        '''providesAssignOpt : empty'''
         p[0] = None
     def p_accumDefOpt_def(self, p):
-        '''accumDefOpt : PLUSEQ  realExpr
-                       | MINUSEQ realExpr
+        '''providesAssignOpt : '='     realExpr
+                             | PLUSEQ  realExpr
+                             | MINUSEQ realExpr
         '''
         p[0] = (p[1],p[2])
 
@@ -1392,14 +1389,6 @@ class MelodeeParser:
         rawUnit = self.currentScope().getUnit(var)
         self.currentScope().setUnit(var+".init", rawUnit)
         self.currentScope().setUnit(var+".diff", rawUnit/self.timeUnit)
-
-    def p_subSystemStatement_output(self, p):
-        '''subSystemStatement : PROVIDES var unitOpt assignOpt ';' '''
-        junction = self.markProvides(p[2],p[3])
-        self.currentEncapsulation().ports[p[2]] = self.connections.makePort(junction)
-        #if there's a definition, process it.
-        if p[4] != None:
-            self.processAssignment(p[2],'=',p[4]) 
     
     def p_unitOpt_empty(self, p):
         '''unitOpt : empty '''
