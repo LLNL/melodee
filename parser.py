@@ -1151,7 +1151,6 @@ class MelodeeParser:
     reserved = {
         "if" : "IF",
         "else" : "ELSE",
-        "elseif" : "ELSEIF",
         "bool" : "BOOL",
         "true" : "TRUE",
         "false" : "FALSE",
@@ -1172,9 +1171,6 @@ class MelodeeParser:
         "use" : "USE",
         "export" : "EXPORT",
         "as" : "AS",
-        #"from" : "FROM",
-
-        #"unit" : "UNIT",
     }
 
     tokens = (
@@ -1463,11 +1459,11 @@ class MelodeeParser:
         p[0] = self.popScope()
 
     def p_elseIfCond(self, p):
-        '''elseIfCond : ELSEIF '(' realExpr ')' '''
-        p[0] = p[3]
+        '''elseIfCond : ELSE IF '(' realExpr ')' '''
+        p[0] = p[4]
     def p_elseOpt_continue(self, p):
-        '''elseOpt : ifScopeBegin elseIfCond thenBody elseOpt'''
-        self.processIfCondition(p[2],p[3],p[4])
+        '''elseOpt : elseIfCond ifScopeBegin thenBody elseOpt'''
+        self.processIfCondition(p[1],p[3],p[4])
         p[0] = self.popScope()
 
     def p_ifScopeBegin(self, p):
