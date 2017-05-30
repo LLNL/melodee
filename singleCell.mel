@@ -48,9 +48,9 @@ shared bcl_time {ms};
 subsystem bcl_time {
   provides bcl_time;
 
-  param offset {ms} = 0;
-  param n {1} = 1;
-  param bcl {ms} = 1000;
+  @param offset {ms} = 0;
+  @param n {1} = 1;
+  @param bcl {ms} = 1000;
 
   if (t < offset) {
      bcl_time = bcl*1000+t-offset;
@@ -66,8 +66,8 @@ subsystem bcl_time {
 shared stim_time {ms};
 
 subsystem squareStim {
-  param duration {ms} = 1;
-  param strength {uA/uF} = 60;
+  @param duration {ms} = 1;
+  @param strength {uA/uF} = 60;
 
   provides iStim = 0;
   if (stim_time < duration) {

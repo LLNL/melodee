@@ -38,7 +38,7 @@ subsystem HH {
    provides E_Na {mV} = (E_R+115{mV});
    subsystem leakage_current {
       E_L {mV} = (E_R+10.613{mV});
-      param g_L {mS/cm^2} = 0.3;
+      @param g_L {mS/cm^2} = 0.3;
       i_L {uA/cm^2} = g_L*(V-E_L);
       provides accum Iion_area += i_L;
    }
@@ -78,7 +78,7 @@ subsystem HH {
       provides accum Iion_area += i_Na;
    }
    provides V_init = -75;
-   param Cm {uF/cm^2} = 1;
+   @param Cm {uF/cm^2} = 1;
    provides accum Iion += Iion_area/Cm;
 }
 
@@ -108,7 +108,7 @@ subsystem newINa {
   m.init = 0.00155;
   m.diff = (m_inf-m)/tau_m;
 
-  param g_Na {mS/cm^2} = 14.838;
+  @param g_Na {mS/cm^2} = 14.838;
   i_Na = g_Na*pow(m,3)*h*j*(V-E_Na);
   provides accum i_Natot {uA/cm^2} += i_Na;
 }

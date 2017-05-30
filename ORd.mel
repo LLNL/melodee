@@ -57,7 +57,7 @@ subsystem ORd {
    Jrelp.init=0;
    CaMKt.init=0;
 
-   param celltype {enum(ENDO,MID,EPI)} = ENDO;
+   @param celltype {enum(ENDO,MID,EPI)} = ENDO;
    
    nao=140.0;
    cao=1.8;

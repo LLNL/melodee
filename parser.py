@@ -790,6 +790,42 @@ class MelodeeParser:
                 return self.enumerations[var]
             else:
                 raise XXXSyntaxError("Variable '%s' used but not defined." % var)
+
+    def processDeclaration(self, var, structure, attributes, unitOpt):
+        if "provides" in structure:
+            junction = self.markProvides(var,unitOpt)
+            self.currentEncapsulation().ports[var] = self.connections.makePort(junction)
+        else:
+            self.checkDeclarable(var)
+            self.processUnitAssignment(var, unitOpt)
+            
+        if "accum" in structure:
+            self.currentSubsystem().accums.add(var)
+        elif "diffvar" in structure:
+            if self.timeUnit == None:
+                raise XXXSyntaxError("Must include an 'integrate' statement before declaring subsystems.")
+            if not self.currentScope().hasUnit(var):
+                raise XXXSyntaxError("Differential variable %s must have a unit." % var)
+
+            self.currentSubsystem().diffvars.add(var)
+            self.currentScope().setSymbol(var, Symbol(var))
+
+            rawUnit = self.currentScope().getUnit(var)
+            self.currentScope().setUnit(var+".init", rawUnit)
+            self.currentScope().setUnit(var+".diff", rawUnit/self.timeUnit)
+        
+        for (name, info) in attributes:
+            if name == "param":
+                self.currentSubsystem().params.add(var)
+
+    def processUnitAssignment(self, var, unitOpt):
+        if unitOpt != None:
+            if self.currentScope().hasUnit(var):
+                if self.currentScope().getUnit(var) != unitOpt:
+                    raise XXXSyntaxError("Declared units for '%s' don't match previous declaration." % var)
+            else:
+                self.currentScope().setUnit(var, unitOpt)
+
     def processAssignment(self, var, operand, rhs):
         subsystem = self.currentSubsystem()
         scope = self.currentScope()
@@ -869,12 +905,13 @@ class MelodeeParser:
             raise XXXSyntaxError("'%s' already an output for this subsystem." % var)
         if var == self.timeVar:
             raise XXXSyntaxError("'%s' already used as the integration variable." % var) 
+        #FIXME
         #if the variable has already been assigned in this subsystem
-        if ss.scope.hasSymbol(var) and ss.scope.getSymbol(var) in ss.ssa:
-            raise XXXSyntaxError("'%s' has already been assigned to, it can't now be declared." % var)
+        #if ss.scope.hasSymbol(var) and ss.scope.getSymbol(var) in ss.ssa:
+        #    raise XXXSyntaxError("'%s' has already been assigned to, it can't now be declared." % var)
         #if the variable is already unit defined in this subsystem
-        if ss.scope.hasUnit(var):
-            raise XXXSyntaxError("Units previously defined for '%s'" % var) 
+        #if ss.scope.hasUnit(var):
+        #    raise XXXSyntaxError("Units previously defined for '%s'" % var) 
     
     def markProvides(self, varname, unitOpt):
         self.checkDeclarable(varname)
@@ -1154,7 +1191,6 @@ class MelodeeParser:
         "bool" : "BOOL",
         "true" : "TRUE",
         "false" : "FALSE",
-        "param" : "PARAM",
         "accum" : "ACCUM",
         "diffvar" : "DIFFVAR",
         "diff" : "DIFF",
@@ -1323,13 +1359,16 @@ class MelodeeParser:
         (name, encap) = p[1]
         self.currentEncapsulation().addChild(name,encap)
 
-    def p_attributeListOpt_empty(self,p):
-        '''attributeListOpt : empty'''
-        p[0] = []
-    def p_attributeListOpt_pop(self, p):
-        '''attributeListOpt : attributeListOpt attribute'''
+    def p_attributeList_single(self,p):
+        '''attributeList : attribute'''
+        p[0] = [p[1]]
+    def p_attributeList_multiple(self, p):
+        '''attributeList : attributeList attribute'''
         p[0] = p[1] + [p[2]]
-    def p_attribute(self, p):
+    def p_attribute_bare(self, p):
+        '''attribute : '@' NAME '''
+        p[0] = (p[2], "")
+    def p_attribute_withCapture(self, p):
         '''attribute : '@' NAME '(' nestedParenCaptured ')' '''
         p[0] = (p[2], p[4])
     def p_nestedParenCaptured_empty(self, p):
@@ -1396,83 +1435,67 @@ class MelodeeParser:
         '''
         p[0] = p[1].value
 
-    def p_subSystemStatement_accum(self, p):
-        '''subSystemStatement : PROVIDES ACCUM var unitOpt accumDefOpt ';' '''
-        junction = self.markProvides(p[3],p[4])
-        self.currentEncapsulation().ports[p[3]] = self.connections.makePort(junction)
-        #mark that junction as an accum junction
-        #FIXME
-        #mark the variable as an accum
-        self.currentSubsystem().accums.add(p[3])
-        #if there's a definition, process it.
-        if p[5] != None:
-            (operand, rhs) = p[5]
-            self.processAssignment(p[3],operand, rhs)
-        
-    def p_accumDefOpt_empty(self, p):
-        '''accumDefOpt : empty'''
-        p[0] = None
-    def p_accumDefOpt_def(self, p):
-        '''accumDefOpt : PLUSEQ  realExpr
-                       | MINUSEQ realExpr
-        '''
+    def p_subSystemStatement_singleDeclaration(self, p):
+        '''subSystemStatement : declaration declList ';' '''
+        (structure,attributes) = p[1]
+        declList = p[2]
+        for (var,unitOpt) in declList:
+            self.processUnitAssignment(var, unitOpt)
+            self.processDeclaration(var, structure, attributes, unitOpt)
+    def p_subSystemStatement_declDefinition(self, p):
+        '''subSystemStatement : declaration generalizedAssignment ';' '''
+        (structure,attributes) = p[1]
+        (var, unitOpt, operand, rhs) = p[2]
+        self.processUnitAssignment(var, unitOpt)
+        self.processDeclaration(var, structure,attributes, unitOpt)
+        self.processAssignment(var, operand, rhs)        
+
+    def p_declaration_both(self, p):
+        '''declaration : structureDecl attributeList'''
         p[0] = (p[1],p[2])
+    def p_declaration_nostructure(self, p):
+        '''declaration : attributeList'''
+        p[0] = (set(),p[1])
+    def p_declaration_noattribute(self, p):
+        '''declaration : structureDecl'''
+        p[0] = (p[1],[])
 
-    def p_subSystemStatement_param(self, p):
-        '''subSystemStatement : PROVIDES PARAM var unitOpt assignOpt ';' 
-                              |          PARAM var unitDef assignOpt ';' 
+    def p_structureDecl_two(self, p):
+        '''structureDecl : PROVIDES ACCUM
+                         | PROVIDES DIFFVAR '''
+        p[0] = set([p[1], p[2]])
+    def p_structureDecl_one(self, p):
+        '''structureDecl : PROVIDES
+                         | DIFFVAR
         '''
-        #if this is a provides
-        if p[1] == "provides":
-            (var, unit, assignOpt) = (p[3],p[4],p[5])
-            junction = self.markProvides(var,unit)
-            self.currentEncapsulation().ports[var] = self.connections.makePort(junction)
-        else:
-            (var, unit, assignOpt) = (p[2],p[3],p[4])
-            self.checkDeclarable(var)
-            self.currentScope().setUnit(var,unit)
-        #mark the variable as a parameter.
-        self.currentSubsystem().params.add(var)
-        #if there's a definition, process it.
-        if assignOpt != None:
-            self.processAssignment(var,'=', assignOpt)
-    def p_assignOpt_empty(self, p):
-        '''assignOpt : empty'''
-        p[0] = None
-    def p_assignOpt_def(self, p):
-        '''assignOpt : '=' realExpr'''
-        p[0] = p[2]
+        p[0] = set([p[1]])
 
-    def p_subSystemStatement_diffvar(self, p):
-        '''subSystemStatement : PROVIDES DIFFVAR var unitOpt ';'
-                              |          DIFFVAR var unitDef ';' 
-        '''
-        if self.timeUnit == None:
-            raise XXXSyntaxError("Must include an 'integrate' statement before declaring subsystems.")
-        #if this is a provides
-        if p[1] == "provides":
-            (var, unit) = (p[3],p[4])
-            junction = self.markProvides(var,unit)
-            self.currentEncapsulation().ports[var] = self.connections.makePort(junction)
-        else:
-            (var, unit) = (p[2],p[3])
-            self.checkDeclarable(var)
-            self.currentScope().setUnit(var,unit)
-        #mark the variable as a diffvar
-        self.currentSubsystem().diffvars.add(var)
-        self.currentScope().setSymbol(var, Symbol(var))
-        #mark the units for the initial and diff conditions
-        rawUnit = self.currentScope().getUnit(var)
-        self.currentScope().setUnit(var+".init", rawUnit)
-        self.currentScope().setUnit(var+".diff", rawUnit/self.timeUnit)
+    def p_unitDecl(self,p):
+        '''unitDecl : varDiffOpt unitOpt '''
+        p[0] = (p[1],p[2])
+        
+    def p_declList_single(self, p):
+        '''declList : declItem '''
+        p[0] = p[1]
+    def p_declList_multiple(self, p):
+        '''declList : declList ',' declItem '''
+        p[0] = p[1] + p[2]
+    def p_declItem_single(self, p):
+        '''declItem : unitDecl'''
+        p[0] = [p[1]]
+    def p_declItem_multiple(self, p):
+        '''declItem : var varDiffList unitOpt'''
+        varDiffList = [p[1]] + p[2]
+        unitOpt = p[3]
+        p[0] = [(var,unitOpt) for var in varDiffList]
 
-    def p_subSystemStatement_output(self, p):
-        '''subSystemStatement : PROVIDES var unitOpt assignOpt ';' '''
-        junction = self.markProvides(p[2],p[3])
-        self.currentEncapsulation().ports[p[2]] = self.connections.makePort(junction)
-        #if there's a definition, process it.
-        if p[4] != None:
-            self.processAssignment(p[2],'=',p[4]) 
+    def p_varDiffList_single(self, p):
+        '''varDiffList : varDiffOpt'''
+        p[0] = [p[1]]
+    def p_varDiffList_multiple(self, p):
+        '''varDiffList : varDiffList varDiffOpt'''
+        p[0] = p[1] + [p[2]]
+
     
     def p_unitOpt_empty(self, p):
         '''unitOpt : empty '''
@@ -1494,23 +1517,23 @@ class MelodeeParser:
         pass
 
     def p_conditionalStatement_varDefn(self, p):
-        '''conditionalStatement : varDiffOpt unitOpt '=' realExpr ';'
-                                | varDiffOpt unitOpt PLUSEQ realExpr ';'
-                                | varDiffOpt unitOpt MINUSEQ realExpr ';'
-                                | varDiffOpt unitOpt TIMESEQ realExpr ';'
-                                | varDiffOpt unitOpt DIVIDEEQ realExpr ';'
-                                | varDiffOpt unitOpt EXPONEQ realExpr ';'
-        '''
-        var = p[1]
-        unitOpt = p[2]
-        if unitOpt != None:
-            if self.currentScope().hasUnit(var):
-                if self.currentScope().getUnit(var) != unitOpt:
-                    raise XXXSyntaxError("Declared units for '%s' don't match established declaration." % var)
-            else:
-                self.currentScope().setUnit(var, unitOpt)
-        self.processAssignment(var, p[3], p[4])        
+        '''conditionalStatement : generalizedAssignment ';' '''
+        (var, unitOpt, operand, rhs) = p[1]
+        self.processUnitAssignment(var, unitOpt)
+        self.processAssignment(var, operand, rhs)        
 
+    def p_generalizedAssignment(self, p):
+        '''generalizedAssignment : unitDecl '=' realExpr
+                                 | unitDecl PLUSEQ realExpr
+                                 | unitDecl MINUSEQ realExpr
+                                 | unitDecl TIMESEQ realExpr
+                                 | unitDecl DIVIDEEQ realExpr
+                                 | unitDecl EXPONEQ realExpr
+        '''
+        (var,unit) = p[1]
+        p[0] = (var, unit, p[2], p[3])
+         
+        
     ########################################################################
     def p_subSystemStatement_if(self, p):
         '''conditionalStatement : ifStatement'''
