@@ -77,7 +77,7 @@ def generateMatlab(model, targetName, initFile, diffFile):
 
 
     out = initFile
-    params = model.params
+    params = model.getVars("param")
     printer = MatlabPrintVisitor(out,params)
     out("""
 function [__y_init, __ordering, __params] = %(target)s_init(varargin)
@@ -101,23 +101,26 @@ function [__y_init, __ordering, __params] = %(target)s_init(varargin)
     else:
         timename = "__current_time"
 
-    if model.inputs:
+    inputs = model.getVars('input')
+    if inputs:
         out("%define the inputs")
-        good |= model.inputs
-    for symbol in order(model.inputs):
+        good |= inputs
+    for symbol in order(inputs):
         out("%s = __params.%s(%s);",pretty(symbol),pretty(symbol),timename)
 
     out("\n\n")
     out("%define the initial conditions")
-    model.printTarget(good,model.params|model.diffvars,printer)
+    diffvars = model.getVars('diffvar')
+    params = model.getVars('param')
+    model.printTarget(good,params|diffvars,printer)
 
-    diffvarNumbering = numberVars(model.diffvars)
+    diffvarNumbering = numberVars(diffvars)
     out("__y_init = zeros(%d, 1);", len(diffvarNumbering))
-    for var in order(model.diffvars):
+    for var in order(diffvars):
         out("__y_init(%d) = %s;",diffvarNumbering[var],pretty(var))
 
     out("__ordering = struct();")
-    for var in order(model.diffvars):
+    for var in order(diffvars):
         out("__ordering.%s = %d;", pretty(var),diffvarNumbering[var])
         
     out.dec()
@@ -140,11 +143,11 @@ function __dydt = %(target)s(__time,__diffvars,varargin)
         good.add(model.time)
 
     out("% make copies of the differential vars")
-    for var in order(model.diffvars):
+    for var in order(diffvars):
         out("%s = __diffvars(%d);", pretty(var), diffvarNumbering[var])
-    good |= model.diffvars
+    good |= diffvars
 
-    if model.inputs:
+    if inputs:
         template["arglower"] = 3
     else:
         template["arglower"] = 2
@@ -158,18 +161,19 @@ else
 end
 """ % template)
         
-    if model.inputs:
+    if inputs:
         out("% define all inputs")
-        good |= model.inputs
-        for symbol in order(model.inputs):
+        good |= inputs
+        for symbol in order(inputs):
             out("%s = __params.%s(%s);",pretty(symbol),pretty(symbol),timename)
 
     out("% define the differential update")
-    model.printTarget(good,set(model.diffvarUpdate.values()),printer)
+    diffvarUpdate = {var : model.info("diffvar",var) for var in diffvars}
+    model.printTarget(good,set(diffvarUpdate.values()),printer)
 
     out("% stuff the differential update into an array")
-    for var in order(model.diffvars):
-        out("__dydt(%d) = %s;", diffvarNumbering[var], pretty(model.diffvarUpdate[var]))
+    for var in order(diffvars):
+        out("__dydt(%d) = %s;", diffvarNumbering[var], pretty(diffvarUpdate[var]))
 
     out.dec()
     out("""

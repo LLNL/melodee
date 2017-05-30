@@ -379,10 +379,22 @@ class ConsolidatedSystem:
                     if inst in allUpdate:
                         printVisitor.equationPrint(inst, self.ssa[inst])
         printer(self.instructions)
-                
+
+    def getVars(self, name):
+        return set(self.namedVariables.get(name, {}).keys())
+
+    def make_a(self, name, symbol, info=None):
+        self.namedVariables.setdefault(name, {})[symbol] = info
+
+    def info(self, name, symbol):
+        return self.namedVariables[name][symbol]
     
     def __init__(self, timeUnit, rootEncap, connections):
-
+        self.namedVariables = { "input": {}, "output": {}, "diffvar": {}}
+        self.ssa = SSA()
+        self.time = None
+        self.instructions = []
+        
         nameFromEncap={}
         def nameAllEncaps(encap, myName=(), retval=None):
             retval[encap] = myName
@@ -447,7 +459,6 @@ class ConsolidatedSystem:
 
         #build the SSA
         convertedInstructions = []
-        self.ssa = SSA()
         symbolMap = SymbolMapping()
         accumsFromJunction = {}
         for (encap,tupName) in nameFromEncap.items():
@@ -495,48 +506,40 @@ class ConsolidatedSystem:
             self.ssa[newSymbol] = AST(sympy.Add(*accums), ASTUnit(junction.rawUnit,False))
 
         #get the inputs/outputs
-        self.inputs = set()
-        self.outputs = set()
         for (name,junction) in rootEncap.junctions.items():
             if rootEncap.isExternal(junction):
                 symbol = symbolFromJunction[junction]
                 if junction in isAssign or junction in isAccum:
-                    self.outputs.add(symbol)
+                    self.make_a("output", symbol)
                 else:
-                    self.inputs.add(symbol)
+                    self.make_a("input", symbol)
         # fix time
         self.time = timeSym
 
         #get the diffvars and params
-        self.diffvars = set()
-        self.diffvarUpdate = {}
-        self.params = set()
-        
         for (encap,tupName) in nameFromEncap.items():
             subsystem = encap.subsystem
             for name in subsystem.diffvars:
                 oldSym = subsystem.getVar(name)
                 newSym = symbolMap.get(encap,oldSym,tupName)
-                self.diffvars.add(newSym)
                 convertedInstructions.append(newSym)
                 diffUnit = subsystem.getUnit(name)
                 self.ssa[newSym] = AST(symbolMap.get(encap,subsystem.getVar(name+".init"),tupName),ASTUnit(diffUnit,False))
                 updateUnit = subsystem.getUnit(name+".diff")
                 updateSym = symbolMap.get(encap,subsystem.getVar(name+".diff"),tupName)
                 if diffUnit/updateUnit == timeUnit:
-                    self.diffvarUpdate[newSym] = updateSym
+                    diffvarUpdate = updateSym
                 else:
                     newName = fullName(tupName + (name+".diff_convertUnit",))
                     newDiff = Symbol(newName)
                     convertedInstructions.append(newDiff)
                     self.ssa[newDiff] = AST(sympy.Mul(updateSym,updateUnit.convertTo(diffUnit/timeUnit)),
                                            ASTUnit(diffUnit/timeUnit,False));
-                    self.diffvarUpdate[newSym] = newDiff
+                    diffvarUpdate = newDiff
+                self.make_a("diffvar", newSym, diffvarUpdate)
             for name in subsystem.params:
                 oldSym = subsystem.getVar(name)
-                self.params.add(symbolMap.get(encap,oldSym,tupName))
-
-        
+                self.make_a("param", symbolMap.get(encap,oldSym,tupName), "")
 
         
         #list all the instructions.
