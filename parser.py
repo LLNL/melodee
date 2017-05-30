@@ -1191,7 +1191,7 @@ class MelodeeParser:
         "ONE",
     ) + tuple(reserved.values())
 
-    literals = "(){}<>!;?:+-/*^=.,~"
+    literals = "(){}<>!;?:+-/*^=.,@"
 
     def t_AND(self, t):
         r'(?:and)|(?:&&)'
@@ -1322,6 +1322,79 @@ class MelodeeParser:
         '''subSystemStatement : subSystemDefinition'''
         (name, encap) = p[1]
         self.currentEncapsulation().addChild(name,encap)
+
+    def p_attributeListOpt_empty(self,p):
+        '''attributeListOpt : empty'''
+        p[0] = []
+    def p_attributeListOpt_pop(self, p):
+        '''attributeListOpt : attributeListOpt attribute'''
+        p[0] = p[1] + [p[2]]
+    def p_attribute(self, p):
+        '''attribute : '@' NAME '(' nestedParenCaptured ')' '''
+        p[0] = (p[2], p[4])
+    def p_nestedParenCaptured_empty(self, p):
+        '''nestedParenCaptured : empty'''
+        p[0] = ""
+    def p_nestedParenCaptured_notParen(self, p):
+        '''nestedParenCaptured : nestedParenCaptured notParen'''
+        p[0] = p[1] + p[2]
+    def p_nestedParenCaptured_paren(self, p):
+        '''nestedParenCaptured : nestedParenCaptured '(' nestedParenCaptured ')' '''
+        p[0] = p[1] + '(' + p[3] + ')'
+    def p_notParen(self, p):
+        '''notParen : IF
+        | ELSE
+        | BOOL
+        | TRUE
+        | FALSE
+        | ACCUM
+        | DIFFVAR
+        | DIFF
+        | INIT
+        | SHARED
+        | PROVIDES
+        | SUBSYSTEM
+        | POW
+        | CONVERT
+        | ENUM
+        | INTEGRATE
+        | USE
+        | EXPORT
+        | AS
+        | LEQ
+        | GEQ
+        | NEQ
+        | BOOLEQ
+        | AND
+        | OR
+        | NOT
+        | PLUSEQ
+        | MINUSEQ
+        | TIMESEQ
+        | DIVIDEEQ
+        | EXPONEQ
+        | NUMBER
+        | ONE
+        | NAME
+        | '{'
+        | '}'
+        | '<'
+        | '>'
+        | '!'
+        | ';'
+        | '?'
+        | ':'
+        | '+'
+        | '-'
+        | '/'
+        | '*'
+        | '^'
+        | '='
+        | '.'
+        | ','
+        | '@'
+        '''
+        p[0] = p[1].value
 
     def p_subSystemStatement_accum(self, p):
         '''subSystemStatement : PROVIDES ACCUM var unitOpt accumDefOpt ';' '''
