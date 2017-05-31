@@ -540,6 +540,8 @@ class ConsolidatedSystem:
                 self.ssa[newSym] = AST(symbolMap.get(encap,subsystem.getVar(name+".init"),tupName),ASTUnit(diffUnit,False))
                 updateUnit = subsystem.getUnit(name+".diff")
                 updateSym = symbolMap.get(encap,subsystem.getVar(name+".diff"),tupName)
+                if timeUnit == None:
+                    timeUnit = diffUnit/updateUnit
                 if diffUnit/updateUnit == timeUnit:
                     diffvarUpdate = updateSym
                 else:
