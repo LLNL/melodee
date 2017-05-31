@@ -317,7 +317,7 @@ void ThisReaction::calc(double dt, const VectorDouble32& __Vm,
     model.printTarget(good,target,cprinter)
     
     out.dec(2)
-    out('''
+    out(r'''
 
 
       if (1) 
@@ -331,7 +331,7 @@ void ThisReaction::calc(double dt, const VectorDouble32& __Vm,
     for var in order(diffvars):
         out('CHECK_BLOWUP(%s);',pretty(diffvarUpdate[var]))
     out.dec(3)
-    out('''
+    out(r'''
 
 #undef CHECK_BLOWUP
          
