@@ -40,14 +40,14 @@ class MatlabPrintVisitor:
     def __init__(self, out, params):
         self.out = out
         self.params = params
-    def ifPrint(self,symbol):
-        self.out("if (%s)",pretty(symbol))
+    def ifPrint(self,printer,ifSymbol,thenList,elseList,choiceList):
+        self.out("if (%s)",pretty(ifSymbol))
         self.out.inc()
-    def elsePrint(self):
+        printer(thenList)
         self.out.dec()
         self.out("else")
         self.out.inc()
-    def endifPrint(self):
+        printer(elseList)
         self.out.dec()
         self.out("end")
     def equationPrint(self,lhs,rhs):

@@ -370,11 +370,7 @@ class ConsolidatedSystem:
         def printer(instructions, allUpdate=allUpdate, printVisitor=printVisitor):
             for inst in instructions:
                 if isinstance(inst, IfInstruction) and inst.ifVar in allUpdate:
-                    printVisitor.ifPrint(inst.ifVar)
-                    printer(inst.thenInstructions)
-                    printVisitor.elsePrint()
-                    printer(inst.elseInstructions)
-                    printVisitor.endifPrint()
+                    printVisitor.ifPrint(printer, inst.ifVar, inst.thenInstructions, inst.elseInstructions, inst.choiceInstructions)
                 else:
                     if inst in allUpdate:
                         printVisitor.equationPrint(inst, self.ssa[inst])
