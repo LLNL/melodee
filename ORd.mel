@@ -105,12 +105,7 @@ subsystem ORd {
    shared INa {uA/uF};
    shared tm {ms};
    subsystem sodium_current {
-      diffvar m {1};
-      diffvar j {1};
-      diffvar hf {1};
-      diffvar hs {1};
-      diffvar hsp {1};
-      diffvar jp {1};
+      diffvar @gate m j hf hs hsp jp {1};
       m.init=0;
       hf.init=1;
       hs.init=1;
@@ -147,9 +142,7 @@ subsystem ORd {
 
    }
 
-   diffvar mL {1};
-   diffvar hL {1};
-   diffvar hLp {1};
+   diffvar @gate mL hL hLp {1};
    mL.init=0;
    hL.init=1;
    hLp.init=1;
@@ -171,13 +164,7 @@ subsystem ORd {
    fINaLp=(1.0/(1.0+KmCaMK/CaMKa));
    INaL=GNaL*(v-ENa)*mL*((1.0-fINaLp)*hL+fINaLp*hLp);
 
-   
-   diffvar a {1};
-   diffvar iF {1};
-   diffvar iS {1};
-   diffvar ap {1};
-   diffvar iFp {1};
-   diffvar iSp {1};
+   diffvar @gate a iF iS ap iFp iSp {1};
    a.init=0;
    iF.init=1;
    iS.init=1;
@@ -227,15 +214,7 @@ subsystem ORd {
    fItop=(1.0/(1.0+KmCaMK/CaMKa));
    Ito=Gto*(v-EK)*((1.0-fItop)*a*i+fItop*ap*ip);
 
-   diffvar d {1};
-   diffvar ff {1};
-   diffvar fs {1};
-   diffvar fcaf {1};
-   diffvar fcas {1};
-   diffvar jca {1};
-   diffvar nca {1};
-   diffvar ffp {1};
-   diffvar fcafp {1};
+   diffvar @gate d ff fs fcaf fcas jca nca ffp fcafp {1};
    d.init=0;
    ff.init=1;
    fs.init=1;
@@ -302,8 +281,8 @@ subsystem ORd {
    ICaK=(1.0-fICaLp)*PCaK*PhiCaK*d*(f*(1.0-nca)+jca*fca*nca)+fICaLp*PCaKp*PhiCaK*d*(fp*(1.0-nca)+jca*fcap*nca);
 
 
-   diffvar xrf {1};
-   diffvar xrs {1};
+   diffvar @gate xrf {1};
+   diffvar @gate xrs {1};
    xrf.init=0;
    xrs.init=0;
 
@@ -327,8 +306,8 @@ subsystem ORd {
    }
    IKr=GKr*sqrt(ko/5.4)*xr*rkr*(v-EK);
 
-   diffvar xs1 {1};
-   diffvar xs2 {1};
+   diffvar @gate xs1 {1};
+   diffvar @gate xs2 {1};
    xs1.init=0;
    xs2.init=0;
 
@@ -346,7 +325,7 @@ subsystem ORd {
    }
    IKs=GKs*KsCa*xs1*xs2*(v-EKs);
 
-   diffvar xk1 {1};
+   diffvar @gate xk1 {1};
    xk1.init=1;
 
    xk1ss=1.0/(1.0+exp(-(v+2.5538*ko+144.59)/(1.5692*ko+3.8115)));

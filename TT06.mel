@@ -83,7 +83,7 @@ subsystem TT06 {
       shared j {1};
       shared m {1};
       subsystem fast_sodium_current_h_gate {
-         provides diffvar h;
+         provides diffvar @gate h;
          alpha_h = ((V < -40) ? 0.057*exp(-(V+80)/6.8) : 0);
          beta_h = ((V < -40) ? (2.7*exp(0.079*V)+310000*exp(0.3485*V)) : 0.77/0.13*(1+exp((V+10.66)/-11.1)));
          h_inf = 1/pow((1+exp((V+71.55)/7.43)),2);
@@ -92,7 +92,7 @@ subsystem TT06 {
          h.diff = (h_inf-h)/tau_h;
       }
       subsystem fast_sodium_current_j_gate {
-         provides diffvar j;
+         provides diffvar @gate j;
          alpha_j = ((V < -40) ? (-25428*exp(0.2444*V)-6.948e-6*exp(-0.04391*V))*(V+37.78)/1/(1+exp(0.311*(V+79.23))) : 0);
          beta_j = ((V < -40) ? 0.02424*exp(-0.01052*V)/(1+exp(-0.1378*(V+40.14))) : 0.6*exp(0.057*V)/(1+exp(-0.1*(V+32))));
          j_inf = 1/pow((1+exp((V+71.55)/7.43)),2);
@@ -101,7 +101,7 @@ subsystem TT06 {
          j.diff = (j_inf-j)/tau_j;
       }
       subsystem fast_sodium_current_m_gate {
-         provides diffvar m;
+         provides diffvar @gate m;
          alpha_m = 1/(1+exp((-60-V)/5));
          beta_m = (0.1/(1+exp((V+35)/5))+0.1/(1+exp((V-50)/200)));
          m_inf = 1/pow((1+exp((-56.86-V)/9.03)),2);
@@ -133,7 +133,7 @@ subsystem TT06 {
       shared Xr1 {1};
       shared Xr2 {1};
       subsystem rapid_time_dependent_potassium_current_Xr1_gate {
-         provides diffvar Xr1;
+         provides diffvar @gate Xr1;
          alpha_xr1 = 450/(1+exp((-45-V)/10));
          beta_xr1 = 6/(1+exp((V+30)/11.5));
          xr1_inf = 1/(1+exp((-26-V)/7));
@@ -142,7 +142,7 @@ subsystem TT06 {
          Xr1.diff = (xr1_inf-Xr1)/tau_xr1;
       }
       subsystem rapid_time_dependent_potassium_current_Xr2_gate {
-         provides diffvar Xr2;
+         provides diffvar @gate Xr2;
          alpha_xr2 = 3/(1+exp((-60-V)/20));
          beta_xr2 = 1.12/(1+exp((V-60)/20));
          xr2_inf = 1/(1+exp((V+88)/24));
@@ -158,7 +158,7 @@ subsystem TT06 {
    subsystem slow_time_dependent_potassium_current {
       shared Xs {1};
       subsystem slow_time_dependent_potassium_current_Xs_gate {
-         provides diffvar Xs;
+         provides diffvar @gate Xs;
          alpha_xs = 1400/sqrt((1+exp((5-V)/6)));
          beta_xs = 1/(1+exp((V-35)/15));
          xs_inf = 1/(1+exp((-5-V)/14));
@@ -183,14 +183,14 @@ subsystem TT06 {
       shared r {1};
       shared s {1};
       subsystem transient_outward_current_r_gate {
-         provides diffvar r;
+         provides diffvar @gate r;
          r_inf = 1/(1+exp((20-V)/6));
          tau_r = (9.5*exp(-pow((V+40),2)/1800)+0.8);
          r.init = 2.235e-8;
          r.diff = (r_inf-r)/tau_r;
       }
       subsystem transient_outward_current_s_gate {
-         provides diffvar s;
+         provides diffvar @gate s;
          s_inf = 1/(1+exp((V+28)/5));
          tau_s = (1000*exp(-pow((V+67),2)/1000)+8);
          s.init = 0.3212;
@@ -218,7 +218,7 @@ subsystem TT06 {
          shared f2 {1};
          shared fCass {1};
          subsystem L_type_Ca_current_d_gate {
-            provides diffvar d;
+            provides diffvar @gate d;
             alpha_d = (1.4/(1+exp((-35-V)/13))+0.25);
             beta_d = 1.4/(1+exp((V+5)/5));
             d_inf = 1/(1+exp((-8-V)/7.5));
@@ -228,21 +228,21 @@ subsystem TT06 {
             d.diff = (d_inf-d)/tau_d;
          }
          subsystem L_type_Ca_current_f2_gate {
-            provides diffvar f2;
+            provides diffvar @gate f2;
             f2_inf = (0.67/(1+exp((V+35)/7))+0.33);
             tau_f2 = (562*exp(-pow((V+27),2)/240)+31/(1+exp((25-V)/10))+80/(1+exp((V+30)/10)));
             f2.init = 0.9778;
             f2.diff = (f2_inf-f2)/tau_f2;
          }
          subsystem L_type_Ca_current_fCass_gate {
-            provides diffvar fCass;
+            provides diffvar @gate fCass;
             fCass_inf = (0.6/(1+pow(Ca_ss/0.05,2))+0.4);
             tau_fCass = (80/(1+pow(Ca_ss/0.05,2))+2);
             fCass.init = 0.9953;
             fCass.diff = (fCass_inf-fCass)/tau_fCass;
          }
          subsystem L_type_Ca_current_f_gate {
-            provides diffvar f;
+            provides diffvar @gate f;
             f_inf = 1/(1+exp((V+20)/7));
             tau_f = (1102.5*exp(-pow((V+27),2)/225)+200/(1+exp((13-V)/10))+180/(1+exp((V+30)/10))+20);
             f.init = 0.8009;
