@@ -376,17 +376,33 @@ class ConsolidatedSystem:
                         printVisitor.equationPrint(inst, self.ssa[inst])
         printer(self.instructions)
 
-    def getVars(self, name):
-        return set(self.namedVariables.get(name, {}).keys())
+    def varsWithAttribute(self, name):
+        return set(self._namedVariables.get(name, {}).keys())
 
+    def input(self, name):
+        return self._inputs[name]
+    def inputs(self):
+        return set(self._inputs.keys())
+    def output(self,name): 
+        return self._outputs[name]
+    def outputs(self):
+        return set(self._outputs.keys())
+    def diffvars(self):
+        return set(self._diffvars.keys())
+    def diffvarUpdate(self, diffvar):
+        return self._diffvars[diffvar]
+        
     def make_a(self, name, symbol, info=None):
-        self.namedVariables.setdefault(name, {})[symbol] = info
+        self._namedVariables.setdefault(name, {})[symbol] = info
 
     def info(self, name, symbol):
-        return self.namedVariables[name][symbol]
+        return self._namedVariables[name][symbol]
     
     def __init__(self, timeUnit, rootEncap, connections):
-        self.namedVariables = { "input": {}, "output": {}, "diffvar": {}}
+        self._namedVariables = {}
+        self._inputs = {}
+        self._outputs = {}
+        self._diffvars = {}
         self.ssa = SSA()
         self.time = None
         self.instructions = []
@@ -506,9 +522,10 @@ class ConsolidatedSystem:
             if rootEncap.isExternal(junction):
                 symbol = symbolFromJunction[junction]
                 if junction in isAssign or junction in isAccum:
-                    self.make_a("output", symbol)
+                    self._outputs[str(symbol)] = symbol
                 else:
-                    self.make_a("input", symbol)
+                    self._inputs[str(symbol)] = symbol
+
         # fix time
         self.time = timeSym
 
@@ -532,7 +549,7 @@ class ConsolidatedSystem:
                     self.ssa[newDiff] = AST(sympy.Mul(updateSym,updateUnit.convertTo(diffUnit/timeUnit)),
                                            ASTUnit(diffUnit/timeUnit,False));
                     diffvarUpdate = newDiff
-                self.make_a("diffvar", newSym, diffvarUpdate)
+                self._diffvars[newSym] = diffvarUpdate
             for (name,thisAttrMap) in subsystem.attributeMap.items():
                 oldSym = subsystem.getVar(name)
                 for (attr,info) in thisAttrMap.items():

@@ -77,7 +77,7 @@ def generateMatlab(model, targetName, initFile, diffFile):
 
 
     out = initFile
-    params = model.getVars("param")
+    params = model.varsWithAttribute("param")
     printer = MatlabPrintVisitor(out,params)
     out("""
 function [__y_init, __ordering, __params] = %(target)s_init(varargin)
@@ -101,7 +101,7 @@ function [__y_init, __ordering, __params] = %(target)s_init(varargin)
     else:
         timename = "__current_time"
 
-    inputs = model.getVars('input')
+    inputs = model.inputs()
     if inputs:
         out("%define the inputs")
         good |= inputs
@@ -110,8 +110,7 @@ function [__y_init, __ordering, __params] = %(target)s_init(varargin)
 
     out("\n\n")
     out("%define the initial conditions")
-    diffvars = model.getVars('diffvar')
-    params = model.getVars('param')
+    diffvars = model.diffvars()
     model.printTarget(good,params|diffvars,printer)
 
     diffvarNumbering = numberVars(diffvars)
@@ -168,7 +167,7 @@ end
             out("%s = __params.%s(%s);",pretty(symbol),pretty(symbol),timename)
 
     out("% define the differential update")
-    diffvarUpdate = {var : model.info("diffvar",var) for var in diffvars}
+    diffvarUpdate = {var : model.diffvarUpdate(var) for var in diffvars}
     model.printTarget(good,set(diffvarUpdate.values()),printer)
 
     out("% stuff the differential update into an array")
