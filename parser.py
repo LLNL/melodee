@@ -537,10 +537,10 @@ class ConsolidatedSystem:
                                            ASTUnit(diffUnit/timeUnit,False));
                     diffvarUpdate = newDiff
                 self.make_a("diffvar", newSym, diffvarUpdate)
-            for name in subsystem.params:
+            for (name,thisAttrMap) in subsystem.attributeMap.items():
                 oldSym = subsystem.getVar(name)
-                self.make_a("param", symbolMap.get(encap,oldSym,tupName), "")
-
+                for (attr,info) in thisAttrMap.items():
+                    self.make_a(attr, symbolMap.get(encap,oldSym,tupName), info)
         
         #list all the instructions.
         for (encap, tupName) in nameFromEncap.items():
@@ -657,7 +657,7 @@ class Subsystem:
         self.outputs = set()
         self.diffvars = set()
         self.accums = set()
-        self.params = set()
+        self.attributeMap = {}
         self.time = None
         self.frozen = set()
 
@@ -818,8 +818,7 @@ class MelodeeParser:
             self.currentScope().setUnit(var+".diff", rawUnit/self.timeUnit)
         
         for (name, info) in attributes:
-            if name == "param":
-                self.currentSubsystem().params.add(var)
+            self.currentSubsystem().attributeMap.setdefault(var, {})[name] = info
 
     def processUnitAssignment(self, var, unitOpt):
         if unitOpt != None:
@@ -839,8 +838,6 @@ class MelodeeParser:
             raise XXXSyntaxError("Can't assign to shared variable '%s'." % var)
         if var == self.timeVar:
             raise XXXSyntaxError("Can't assign to integration variable '%s'." % var)
-        #elif var in self.params and var in self.paramDefault: #FIXME
-        #    raise XXXSyntaxError("Can't assign to parameter '%s' once it has been read." % var)
         if var in subsystem.accums:
             if operand != '+=' and operand != '-=':
                 raise XXXSyntaxError("Can only += or -= accumulation variable '%s'."%var)
@@ -889,7 +886,7 @@ class MelodeeParser:
         #parameter checking code.
         #FIXME
         nameDepend = set([symbol.name for symbol in rhs.dependencies()])
-        newlyReadParams = (subsystem.params & nameDepend) - subsystem.frozen
+        newlyReadParams = (set(subsystem.attributeMap.keys()) & nameDepend) - subsystem.frozen
         newlyReadParams -= set([var])
         subsystem.frozen |= newlyReadParams
         
@@ -902,8 +899,6 @@ class MelodeeParser:
             raise XXXSyntaxError("'%s' already defined as a differential variable in this subsystem." % var)
         if var in ss.accums:
             raise XXXSyntaxError("'%s' already defined as an accumulation output for this subsystem." % var)
-        if var in ss.params:
-            raise XXXSyntaxError("'%s' already defined as a parameter for this subsystem." % var)
         if var in ss.outputs:
             raise XXXSyntaxError("'%s' already an output for this subsystem." % var)
         if var == self.timeVar:
