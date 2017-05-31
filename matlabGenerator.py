@@ -27,7 +27,7 @@ import sys
 import re
 from sympy.printing.octave import octave_code
 
-
+import parser
 from parser import MelodeeParser
 import utility
 from utility import order
@@ -54,11 +54,11 @@ class MatlabPrintVisitor:
         rhsText = octave_code(rhs.sympy)
         if lhs in self.params:
             self.out("""
-if (isfield(__params, '%(name)s'))
-   %(name)s = __params.%(name)s;
+if (isfield(mel_params, '%(name)s'))
+   %(name)s = mel_params.%(name)s;
 else
    %(name)s = %(rhs)s;
-   __params.%(name)s = %(name)s;
+   mel_params.%(name)s = %(name)s;
 end""", name=pretty(lhs), rhs=rhsText)
         else:
             self.out("%s = %s;", pretty(lhs), rhsText)
@@ -80,12 +80,12 @@ def generateMatlab(model, targetName, initFile, diffFile):
     params = model.params
     printer = MatlabPrintVisitor(out,params)
     out("""
-function [__y_init, __ordering, __params] = %(target)s_init(varargin)
+function [mel_y_init, mel_ordering, mel_params] = %(target)s_init(varargin)
    narginchk(0,1);
    if (nargin >= 1)
-      __params = varargin{1};
+      mel_params = varargin{1};
    else
-      __params = struct();
+      mel_params = struct();
    end
 """ % template)
     out.inc()
@@ -99,26 +99,26 @@ function [__y_init, __ordering, __params] = %(target)s_init(varargin)
         out("%s = 0;",timename)
         good.add(model.time)
     else:
-        timename = "__current_time"
+        timename = "mel_current_time"
 
     if model.inputs:
         out("%define the inputs")
         good |= model.inputs
     for symbol in order(model.inputs):
-        out("%s = __params.%s(%s);",pretty(symbol),pretty(symbol),timename)
+        out("%s = mel_params.%s(%s);",pretty(symbol),pretty(symbol),timename)
 
     out("\n\n")
     out("%define the initial conditions")
     model.printTarget(good,model.params|model.diffvars,printer)
 
     diffvarNumbering = numberVars(model.diffvars)
-    out("__y_init = zeros(%d, 1);", len(diffvarNumbering))
+    out("mel_y_init = zeros(%d, 1);", len(diffvarNumbering))
     for var in order(model.diffvars):
-        out("__y_init(%d) = %s;",diffvarNumbering[var],pretty(var))
+        out("mel_y_init(%d) = %s;",diffvarNumbering[var],pretty(var))
 
-    out("__ordering = struct();")
+    out("mel_ordering = struct();")
     for var in order(model.diffvars):
-        out("__ordering.%s = %d;", pretty(var),diffvarNumbering[var])
+        out("mel_ordering.%s = %d;", pretty(var),diffvarNumbering[var])
         
     out.dec()
     out("""
@@ -128,20 +128,20 @@ end
     out = diffFile
     printer = MatlabPrintVisitor(out,params)
     out("""
-function __dydt = %(target)s(__time,__diffvars,varargin)
+function mel_dydt = %(target)s(mel_time,mel_diffvars,varargin)
 """ % template)
     out.inc()
-    out("__dydt = zeros(%d,1);" % len(diffvarNumbering))
+    out("mel_dydt = zeros(%d,1);" % len(diffvarNumbering))
     
     good = set()
     if model.time != None:
         out("% define time")
-        out("%s = __time;",timename)
+        out("%s = mel_time;",timename)
         good.add(model.time)
 
     out("% make copies of the differential vars")
     for var in order(model.diffvars):
-        out("%s = __diffvars(%d);", pretty(var), diffvarNumbering[var])
+        out("%s = mel_diffvars(%d);", pretty(var), diffvarNumbering[var])
     good |= model.diffvars
 
     if model.inputs:
@@ -152,9 +152,9 @@ function __dydt = %(target)s(__time,__diffvars,varargin)
     out("""
 narginchk(%(arglower)d,3);
 if (nargin >= 3)
-    __params = varargin{1};
+    mel_params = varargin{1};
 else
-   __params = struct();
+   mel_params = struct();
 end
 """ % template)
         
@@ -162,14 +162,14 @@ end
         out("% define all inputs")
         good |= model.inputs
         for symbol in order(model.inputs):
-            out("%s = __params.%s(%s);",pretty(symbol),pretty(symbol),timename)
+            out("%s = mel_params.%s(%s);",pretty(symbol),pretty(symbol),timename)
 
     out("% define the differential update")
     model.printTarget(good,set(model.diffvarUpdate.values()),printer)
 
     out("% stuff the differential update into an array")
     for var in order(model.diffvars):
-        out("__dydt(%d) = %s;", diffvarNumbering[var], pretty(model.diffvarUpdate[var]))
+        out("mel_dydt(%d) = %s;", diffvarNumbering[var], pretty(model.diffvarUpdate[var]))
 
     out.dec()
     out("""
