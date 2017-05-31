@@ -37,17 +37,24 @@ def pretty(symbol):
 
 
 class MatlabPrintVisitor:
-    def __init__(self, out, params):
+    def __init__(self, out, ssa, params):
         self.out = out
+        self.ssa = ssa
         self.params = params
     def ifPrint(self,printer,ifSymbol,thenList,elseList,choiceList):
         self.out("if (%s)",pretty(ifSymbol))
         self.out.inc()
         printer(thenList)
+        for choiceVar in choiceList:
+            choice = self.ssa[choiceVar]
+            self.out("%s = %s;",pretty(choiceVar),pretty(choice.thenVar))
         self.out.dec()
         self.out("else")
         self.out.inc()
         printer(elseList)
+        for choiceVar in choiceList:
+            choice = self.ssa[choiceVar]
+            self.out("%s = %s;",pretty(choiceVar),pretty(choice.elseVar))
         self.out.dec()
         self.out("end")
     def equationPrint(self,lhs,rhs):
@@ -78,7 +85,7 @@ def generateMatlab(model, targetName, initFile, diffFile):
 
     out = initFile
     params = model.varsWithAttribute("param")
-    printer = MatlabPrintVisitor(out,params)
+    printer = MatlabPrintVisitor(out,model.ssa,params)
     out("""
 function [__y_init, __ordering, __params] = %(target)s_init(varargin)
    narginchk(0,1);
@@ -128,7 +135,7 @@ end
 """ % template)
 
     out = diffFile
-    printer = MatlabPrintVisitor(out,params)
+    printer = MatlabPrintVisitor(out,model.ssa,params)
     out("""
 function __dydt = %(target)s(__time,__diffvars,varargin)
 """ % template)
