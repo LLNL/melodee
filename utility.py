@@ -42,7 +42,7 @@ class Indenter:
         for line in initialstrip.split('\n'):
             outline = indentString+line
             if line == "":
-                print >>self.outfile, "\n"
+                print >>self.outfile, "\n",
             elif kwargs:
                 print >>self.outfile, (outline % kwargs)
             elif len(args) == 1 and type(args[0]) == dict:
