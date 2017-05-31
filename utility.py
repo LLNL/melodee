@@ -54,11 +54,11 @@ class Indenter:
             else:
                 print >>self.outfile, (outline % args)
 
-    def inc(self):
-        self.indentAmount += 1
+    def inc(self, indentAmount=1):
+        self.indentAmount += indentAmount
 
-    def dec(self):
-        self.indentAmount -= 1
+    def dec(self, indentAmount=1):
+        self.indentAmount -= indentAmount
 
 def order(iterable):
     ret = [item for item in iterable]
