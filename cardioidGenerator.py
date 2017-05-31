@@ -46,7 +46,7 @@ class CPrintVisitor:
         return self.declaredStack.pop()
     def ifPrint(self,printer,ifSymbol,thenList,elseList,choiceList):
         for choice in choiceList:
-            if choice not in self.declaredStack[-1]:
+            if pretty(choice) not in self.declaredStack[-1]:
                 self.out("%s %s;",self.decltype,choice)
             self.declaredStack[-1].add(pretty(choice))
         self.out("if (%s)",pretty(ifSymbol))
@@ -56,7 +56,10 @@ class CPrintVisitor:
         printer(thenList)
         for choiceVar in choiceList:
             choice = self.ssa[choiceVar]
-            self.out("%s = %s;",pretty(choiceVar),pretty(choice.thenVar))
+            lhs = pretty(choiceVar)
+            rhs = pretty(choice.thenVar)
+            if lhs != rhs:
+                self.out("%s = %s;",lhs,rhs)
         self.popStack()
         self.out.dec()
         self.out("}")
@@ -67,7 +70,10 @@ class CPrintVisitor:
         printer(elseList)
         for choiceVar in choiceList:
             choice = self.ssa[choiceVar]
-            self.out("%s = %s;",pretty(choiceVar),pretty(choice.elseVar))
+            lhs = pretty(choiceVar)
+            rhs = pretty(choice.elseVar)
+            if lhs != rhs:
+                self.out("%s = %s;",lhs,rhs)
         self.popStack()
         self.out.dec()
         self.out("}")

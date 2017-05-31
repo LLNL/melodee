@@ -47,14 +47,20 @@ class MatlabPrintVisitor:
         printer(thenList)
         for choiceVar in choiceList:
             choice = self.ssa[choiceVar]
-            self.out("%s = %s;",pretty(choiceVar),pretty(choice.thenVar))
+            lhs = pretty(choiceVar)
+            rhs = pretty(choice.thenVar)
+            if lhs != rhs:
+                self.out("%s = %s;",lhs,rhs)
         self.out.dec()
         self.out("else")
         self.out.inc()
         printer(elseList)
         for choiceVar in choiceList:
             choice = self.ssa[choiceVar]
-            self.out("%s = %s;",pretty(choiceVar),pretty(choice.elseVar))
+            lhs = pretty(choiceVar)
+            rhs = pretty(choice.elseVar)
+            if lhs != rhs:
+                self.out("%s = %s;",lhs,rhs)
         self.out.dec()
         self.out("end")
     def equationPrint(self,lhs,rhs):
