@@ -595,6 +595,7 @@ class ConsolidatedSystem:
         definedSymbols = set()
         if self.time != None:
             definedSymbols.add(self.time)
+        definedSymbols |= set(self._inputs.values())
 
         while undefinedInstructions:
             removeThisIter = set()
