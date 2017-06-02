@@ -1,0 +1,16 @@
+
+shared V {mV};
+shared Iion {uA/uF};
+shared V_init {mV};
+
+
+subsystem ORd_with_TT06_INa {
+  use ORd - .sodium_current {
+    export ENa;
+  }
+  use TT06.fast_sodium_current {
+    export i_Naitot as INa;
+    export fast_sodium_current_m_gate.tau_m as tm;
+    export E_Na as ENa;
+  }
+}
