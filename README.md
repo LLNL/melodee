@@ -25,7 +25,7 @@ Requirements:
 To test simply, type
 
 ```bash
-./matlabGenerator.py modifiedModel,bclDefault HH.mel singleCell.mel
+./matlabGenerator.py modifiedModel,bclDefault HH.mel domains/electrophysiology/singleCell.mel
 ```
 
 -----------------
