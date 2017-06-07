@@ -79,11 +79,11 @@ class ConsolidatedSystem:
     def input(self, name):
         return self._inputs[name]
     def inputs(self):
-        return set(self._inputs.keys())
+        return set(self._inputs.values())
     def output(self,name): 
         return self._outputs[name]
     def outputs(self):
-        return set(self._outputs.keys())
+        return set(self._outputs.values())
     def diffvars(self):
         return set(self._diffvars.keys())
     def diffvarUpdate(self, diffvar):
