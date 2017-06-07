@@ -32,9 +32,76 @@ import ply.yacc as yacc
 
 import units
 
+###################################################################
 #these parts make up the external API
 
+class ConsolidatedSystem:
+    '''Output a system that reduces an encap to a useable core'''
+    def __init__(self):
+        self._namedVariables = {}
+        self._inputs = {}
+        self._outputs = {}
+        self._diffvars = {}
+        self.ssa = SSA()
+        self.time = None
+        self.instructions = []
+    
+    def dependencies(self, var):
+        return self.ssa.dependencies(var)
+    
+    def allDependencies(self, good, target):
+        depend = set()
+        front = set(target)
+        while front:
+            newFront = set()
+            for var in front:
+                if var not in good:
+                    depend.add(var)
+                    newFront |= self.dependencies(var)
+            front = newFront
+        return depend
+    
+    def printTarget(self, good, target, printVisitor):
+        allUpdate = self.allDependencies(good, target)
 
+        def printer(instructions, allUpdate=allUpdate, printVisitor=printVisitor):
+            for inst in instructions:
+                if isinstance(inst, IfInstruction) and inst.ifVar in allUpdate:
+                    printVisitor.ifPrint(printer, inst.ifVar, inst.thenInstructions, inst.elseInstructions, inst.choiceInstructions)
+                else:
+                    if inst in allUpdate:
+                        printVisitor.equationPrint(inst, self.ssa[inst])
+        printer(self.instructions)
+
+    def varsWithAttribute(self, name):
+        return set(self._namedVariables.get(name, {}).keys())
+
+    def input(self, name):
+        return self._inputs[name]
+    def inputs(self):
+        return set(self._inputs.keys())
+    def output(self,name): 
+        return self._outputs[name]
+    def outputs(self):
+        return set(self._outputs.keys())
+    def diffvars(self):
+        return set(self._diffvars.keys())
+    def diffvarUpdate(self, diffvar):
+        return self._diffvars[diffvar]
+        
+    def make_a(self, name, symbol, info=None):
+        self._namedVariables.setdefault(name, {})[symbol] = info
+
+    def info(self, name, symbol):
+        return self._namedVariables[name][symbol]
+
+class MelodeeParser:
+    def __init__(self, *args, **kwargs):
+        self._parser = InternalMelodeeParser(*args, **kwargs)
+    def parse(self, text):
+        return self._parser.parse(text)
+    def getModel(self, target):
+        return self._parser.getModel(target)
 
 #############################################################################
 
@@ -346,67 +413,9 @@ class Encapsulation:
 def fullName(tupleName):
     return ":".join(tupleName)
 
-class ConsolidatedSystem:
-    '''Output a system that reduces an encap to a useable core'''
 
-    def dependencies(self, var):
-        return self.ssa.dependencies(var)
-    
-    def allDependencies(self, good, target):
-        depend = set()
-        front = set(target)
-        while front:
-            newFront = set()
-            for var in front:
-                if var not in good:
-                    depend.add(var)
-                    newFront |= self.dependencies(var)
-            front = newFront
-        return depend
-    
-    def printTarget(self, good, target, printVisitor):
-        allUpdate = self.allDependencies(good, target)
-
-        def printer(instructions, allUpdate=allUpdate, printVisitor=printVisitor):
-            for inst in instructions:
-                if isinstance(inst, IfInstruction) and inst.ifVar in allUpdate:
-                    printVisitor.ifPrint(printer, inst.ifVar, inst.thenInstructions, inst.elseInstructions, inst.choiceInstructions)
-                else:
-                    if inst in allUpdate:
-                        printVisitor.equationPrint(inst, self.ssa[inst])
-        printer(self.instructions)
-
-    def varsWithAttribute(self, name):
-        return set(self._namedVariables.get(name, {}).keys())
-
-    def input(self, name):
-        return self._inputs[name]
-    def inputs(self):
-        return set(self._inputs.keys())
-    def output(self,name): 
-        return self._outputs[name]
-    def outputs(self):
-        return set(self._outputs.keys())
-    def diffvars(self):
-        return set(self._diffvars.keys())
-    def diffvarUpdate(self, diffvar):
-        return self._diffvars[diffvar]
-        
-    def make_a(self, name, symbol, info=None):
-        self._namedVariables.setdefault(name, {})[symbol] = info
-
-    def info(self, name, symbol):
-        return self._namedVariables[name][symbol]
-    
-    def __init__(self, timeUnit, rootEncap, connections):
-        self._namedVariables = {}
-        self._inputs = {}
-        self._outputs = {}
-        self._diffvars = {}
-        self.ssa = SSA()
-        self.time = None
-        self.instructions = []
-        
+def consolidateSystem(timeUnit, rootEncap, connections):
+        self = ConsolidatedSystem()
         nameFromEncap={}
         def nameAllEncaps(encap, myName=(), retval=None):
             retval[encap] = myName
@@ -660,7 +669,9 @@ class ConsolidatedSystem:
         #now rename all the variables.
         for (var,name) in nameMap.items():
             var.name = name
-        
+
+
+        return self
             
         
 
@@ -716,7 +727,7 @@ def strifyInstructions(ilist, ssa, indent=0):
     return ret
 
         
-class MelodeeParser:
+class InternalMelodeeParser:
     def __init__(self, **kw):
         self.debug = kw.get('debug', 0),
         self.start = kw.get('start', 'topLevelStatementsOpt')
@@ -741,7 +752,7 @@ class MelodeeParser:
     def getModel(self, name):
         rootEncap = self.encapsulationStack[0].children[name]
         timeUnit = self.timeUnitFromEncapName[name]
-        return ConsolidatedSystem(timeUnit,rootEncap,self.connections)
+        return consolidateSystem(timeUnit,rootEncap,self.connections)
         
     def clearEnvironment(self):
         self.timeVar = None
@@ -1940,7 +1951,7 @@ class MelodeeParser:
 
     
 if __name__=="__main__":
-    p = MelodeeParser()
+    p = InternalMelodeeParser()
     data = '''
 and && or || not ! 0 2.0 .3 40. 5e+6 if myID */* bljsadfj */ */
 '''
@@ -1952,11 +1963,11 @@ and && or || not ! 0 2.0 .3 40. 5e+6 if myID */* bljsadfj */ */
             break
         print tok
 
-    p = MelodeeParser(start="unitExpr")
+    p = InternalMelodeeParser(start="unitExpr")
     print p.parse("mV/ms")
     print p.parse("uA/uF")
 
-    p = MelodeeParser(start="realExpr")
+    p = InternalMelodeeParser(start="realExpr")
     p.p_subSystemBegin([None, 'subsystem', "testing", '{'])
     p.currentScope().setSymbol("a", Symbol("a"))
     p.currentScope().setSymbol("b", Symbol("b"))
@@ -2086,7 +2097,7 @@ subsystem modifiedModel {
   } 
 }
 '''
-    p = MelodeeParser(start="topLevelStatementsOpt")
+    p = InternalMelodeeParser(start="topLevelStatementsOpt")
     p.parse(HH)
     model = p.getModel("modifiedModel")
     print strifyInstructions(model.instructions, model.ssa)
