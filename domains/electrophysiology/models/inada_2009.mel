@@ -1,0 +1,467 @@
+/*
+ * <license>
+ * Copyright (c) 2016-2017, Lawrence Livermore National Security,
+ * LLC. Produced at the Lawrence Livermore National Laboratory. Written
+ * by Robert Blake <blake14@llnl.gov>.
+ *
+ * LLNL-CODE-720003.
+ * All rights reserved.
+ *
+ * This file is part of MELODEE. For details, see
+ * http://github.com/llnl/melodee.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "Licensee"); you
+ * may not use this file except in compliance with the License.  You may
+ * obtain a copy of the License at:
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * permissions and limitations under the license.
+ * </license>
+ */
+
+
+//NOTE: Initial conditions for statevariables don't match the cellML version
+//I was too lazy to transcribe all those numbers.
+
+integrate time {s};
+
+shared V {mV};
+shared V_init {mV};
+shared Iion {uA/uF};
+
+shared cell_type {enum(AN,NH,N)};
+subsystem inada_N_switch { provides cell_type = N; }
+subsystem inada_NH_switch { provides cell_type = NH; }
+subsystem inada_AN_switch { provides cell_type = AN; }
+
+
+shared Iion_sum {nA};
+
+shared RTONF {mV};
+shared Nao {mM};
+shared Kc {mM};
+shared Nai {mM};
+shared F {C/mol};
+shared Ki {mM};
+shared ACh {mmol/L};
+subsystem inada_base {
+   provides F {C/mol} = 96485.3415;
+   provides R {J/kmol/K} = 8314.472;
+   provides T {K}= 310;
+   provides RTONF {mV}= R*T/F;
+
+   provides V_init {mV};
+   if (cell_type == N) {
+      V_init {mV} = -49.7094187908202;
+   } else if (cell_type == NH) {
+      V_init {mV} = -69.760276376489;
+   } else {
+      V_init {mV} = -71.5535452525735;
+   }
+
+   if (cell_type == NH) {
+      C {uF} = 2.9e-5;
+   } else {
+      C {uF} = 4e-5;
+   }
+   provides accum Iion += convert(Iion_sum, uA)/C;
+
+   shared Cai {mmol/L};
+   shared Casub {mmol/L};
+   shared E_K {mV};
+   shared E_Na {mV};
+
+   provides Ki {mmol/L} = 140;
+   provides Nai {mmol/L} = 8;
+   provides Cao {mmol/L} = 2;
+   provides Kc {mmol/L} = 5.4;
+   provides Nao {mmol/L} = 140;
+
+   subsystem background_current {
+      if (cell_type == N) {
+         E_b {mV} = -22.5;
+         g_b {uS} = 0.0012;
+      } else if (cell_type == NH) {
+         E_b {mV} = -40;
+         g_b {uS} = 0.002;
+      } else {
+         E_b {mV} = -52.5;
+         g_b {uS} = 0.0018;
+      }
+      provides accum Iion_sum += g_b*(V-E_b);
+   }
+   subsystem sodium_potassium_pump {
+      if (cell_type == N) {
+         I_p {nA} = 0.14268;
+      } else if (cell_type == NH) {
+         I_p {nA} = 0.1968;
+      } else {
+         I_p {nA} = 0.0246;
+      }
+      provides accum Iion_sum += I_p*pow(Nai/(5.64{mmol/L}+Nai),3{1})*pow(Kc/(0.621{mmol/L}+Kc),2{1})*1.6{1}/(1.5{1}+exp(-(V+60{mV})/40{mV}));
+   }
+   //WARNING, circular dependency detected, dumping the rest.  You'll have to fix this manually.
+   shared i_ACh {nA};
+   shared i_CaL {nA};
+   subsystem L_type_calcium_current {
+      shared d {1};
+      shared f {1};
+      shared f2 {1};
+      subsystem L_type_calcium_current_d_gate {
+         provides diffvar d {1};
+         if (cell_type == N) {
+            act_shift {mV} = -15;
+         } else {
+            act_shift {mV} = 0;
+         }
+         alpha_d {1/s} = (-26.12{1/s/mV}*(V+35{mV})/(exp((V+35{mV})/-2.5{mV})-1{1})+-78.11{1/s/mV}*V/(exp(-0.208{1/mV}*V)-1{1}));
+         beta_d {1/s} = 10.52{1/s/mV}*(V-5{mV})/(exp(0.4{1/mV}*(V-5{mV}))-1{1});
+         if (cell_type == N) {
+            slope_factor_act {mV} = -5;
+         } else {
+            slope_factor_act {mV} = -6.61;
+         }
+         d_inf {1} = 1{1}/(1{1}+exp((V-(-3.2{mV}+act_shift))/slope_factor_act));
+         tau_d {s} = 1{1}/(alpha_d+beta_d);
+         d.init {1} = 0.00179250298710316;
+         d.diff = (d_inf-d)/tau_d;
+      }
+      subsystem L_type_calcium_current_f2_gate {
+         provides diffvar f2 {1};
+         inact_shift {mV} = -5;
+         tau_f2 {s} = (0.06{s}+0.48076{s}*2.25{1}*exp(-pow((V--40{mV}),2{1})/138.04{mV^2}));
+         f2_inf {1} = 1{1}/(1{1}+exp((V-(-24{mV}+inact_shift))/6.31{mV}));
+         f2.init {1} = 0.774394220125623;
+         f2.diff = (f2_inf-f2)/tau_f2;
+      }
+      subsystem L_type_calcium_current_f_gate {
+         provides diffvar f {1};
+         inact_shift {mV} = -5;
+         tau_f {s} = (0.01{s}+0.1539{s}*exp(-pow((V+40{mV}),2{1})/185.67{mV^2}));
+         f_inf {1} = 1{1}/(1{1}+exp((V-(-24{mV}+inact_shift))/6.31{mV}));
+         f.init {1} = 0.975550840189597;
+         f.diff = (f_inf-f)/tau_f;
+      }
+      if (cell_type == N) {
+         E_CaL {mV} = 62;
+         g_CaL {uS} = 0.009;
+      } else if (cell_type == NH) {
+         E_CaL {mV} = 62.1;
+         g_CaL {uS} = 0.021;
+      } else {
+         E_CaL {mV} = 62.5;
+         g_CaL {uS} = 0.0185;
+      }
+      provides i_CaL {nA} = g_CaL*d*(0.675{1}*f+0.325{1}*f2)*(V-E_CaL)*(1{1}-i_ACh*ACh/(0.9e-4{mmol/L}+ACh)/1{nA});
+      provides accum Iion_sum += i_CaL;
+   }
+   subsystem acetylcholine_sensitive_current {
+      provides ACh {mmol/L};
+      shared achf {1};
+      shared achs {1};
+      subsystem acetylcholine_sensitive_current_achf_gate {
+         provides diffvar achf {1};
+         alpha_achf {1/s} = 73.1;
+         beta_achf {1/s} = 120{1/s}/(1{1}+exp(-(V+50{mV})/15{mV}));
+         achf.init {1} = 0.550559577208797;
+         achf.diff = (alpha_achf*(1{1}-achf)-beta_achf*achf);
+      }
+      subsystem acetylcholine_sensitive_current_achs_gate {
+         provides diffvar achs {1};
+         alpha_achs {1/s} = 3.7;
+         beta_achs {1/s} = 5.82{1/s}/(1{1}+exp(-(V+50{mV})/15{mV}));
+         achs.init {1} = 0.567277036232041;
+         achs.diff = (alpha_achs*(1{1}-achs)-beta_achs*achs);
+      }
+      ACh {mmol/L} = 0;
+      K_ACh {mmol/L} = 0.00035;
+      g_ACh_max {uS} = 0.0198;
+      g_ACh {uS} = g_ACh_max*achf*achs*pow(ACh,1.5{1})/(pow(K_ACh,1.5{1})+pow(ACh,1.5{1}));
+      provides i_ACh {nA} = g_ACh*Kc/(10{mmol/L}+Kc)*(V-E_K)/(1{1}+exp(((V-E_K)-140{mV})/(2.5{1}*RTONF)));
+      provides accum Iion_sum += i_ACh;
+   }
+
+   shared i_NaCa {nA};
+   subsystem intracellular_calcium_concentration {
+      provides diffvar Cai {mmol/L};
+      provides diffvar Casub {mmol/L};
+      diffvar Ca_rel {mmol/L};
+      diffvar Ca_up {mmol/L};
+      diffvar f_CMi {1};
+      diffvar f_CMs {1};
+      diffvar f_CQ {1};
+      diffvar f_CSL {1};
+      diffvar f_TC {1};
+      diffvar f_TMC {1};
+      diffvar f_TMM {1};
+      K_up {mmol/L} = 0.0006;
+      if (cell_type == N) {
+         P_rel {1/s} = 1500;
+         V_cell {um^3} = 3.18872e-6;
+      } else {
+         P_rel {1/s} = 1805.6;
+         V_cell {um^3} = 4.39823e-6;
+      }
+      diff_f_CMi {1/s} = (227.7e3{L/s/mmol}*Cai*(1{1}-f_CMi)-0.542e3{1/s}*f_CMi);
+      diff_f_CMs {1/s} = (227.7e3{L/s/mmol}*Casub*(1{1}-f_CMs)-0.542e3{1/s}*f_CMs);
+      diff_f_CQ {1/s} = (0.534e3{L/s/mmol}*Ca_rel*(1{1}-f_CQ)-0.445e3{1/s}*f_CQ);
+      diff_f_CSL {1/s} = 0.001{1}*(115{L/s/mmol}*Casub*(1{1}-f_CSL)-1000{1/s}*f_CSL);
+      diff_f_TC {1/s} = (88.8e3{L/s/mmol}*Cai*(1{1}-f_TC)-0.446e3{1/s}*f_TC);
+      diff_f_TMC {1/s} = (227.7e3{L/s/mmol}*Cai*((1{1}-f_TMC)-f_TMM)-0.00751e3{1/s}*f_TMC);
+      diff_f_TMM {1/s} = (2.277e3{L/s/mmol}*2.5{mmol/L}*((1{1}-f_TMC)-f_TMM)-0.751e3{1/s}*f_TMM);
+      i_diff {mmol/s/L} = (Casub-Cai)/0.04e-3{s};
+      tau_tr {s} = 0.06;
+      V_rel {um^3} = 0.0012{1}*V_cell;
+      V_sub {um^3} = 0.01{1}*V_cell;
+      V_up {um^3} = 0.0116{1}*V_cell;
+      f_CMi.init {1} = 0.0723007987059414;
+      f_CMi.diff = diff_f_CMi;
+      f_CMs.init {1} = 0.0630771339141488;
+      f_CMs.diff = diff_f_CMs;
+      f_CQ.init {1} = 0.261430602900137;
+      f_CQ.diff = diff_f_CQ;
+      f_CSL.init {1} = 4.1497704886823e-5;
+      f_CSL.diff = diff_f_CSL;
+      f_TC.init {1} = 0.0356473236675985;
+      f_TC.diff = diff_f_TC;
+      f_TMC.init {1} = 0.443317425115817;
+      f_TMC.diff = diff_f_TMC;
+      f_TMM.init {1} = 0.491718960234865;
+      f_TMM.diff = diff_f_TMM;
+      i_rel {mmol/s/L} = P_rel*(Ca_rel-Casub)/(1{1}+pow(0.0012{mmol/L}/Casub,2{1}));
+      i_tr {mmol/s/L} = (Ca_up-Ca_rel)/tau_tr;
+      i_up {mmol/s/L} = 5{mmol/s/L}/(1{1}+K_up/Cai);
+      Ca_rel.init {mmol/L} = 0.296249516481577;
+      Ca_rel.diff = ((i_tr-i_rel)-10{mmol/L}*diff_f_CQ);
+      Ca_up.init {mmol/L} = 1.11092514657408;
+      Ca_up.diff = (i_up-i_tr*V_rel/V_up);
+      Casub.init {mmol/L} = 0.000160310601192365;
+      Casub.diff = ((((-(i_CaL-2{1}*i_NaCa)/(2{uL/um^3}*F)+i_rel*V_rel)/V_sub-i_diff)-0.045{mmol/L}*diff_f_CMs)-0.031{mmol/L}/1.2{1}*diff_f_CSL);
+      Vi {um^3} = (0.46{1}*V_cell-V_sub);
+      Cai.init {mmol/L} = 0.000184969821581882;
+      Cai.diff = ((i_diff*V_sub-i_up*V_up)/Vi-(0.045{mmol/L}*diff_f_CMi+0.031{mmol/L}*diff_f_TC+0.062{mmol/L}*diff_f_TMC));
+   }
+
+   subsystem rapid_delayed_rectifier_potassium_current {
+      provides E_K {mV};
+      shared paf {1};
+      shared pas {1};
+      shared pik {1};
+      subsystem rapid_delayed_rectifier_potassium_current_paf_gate {
+         provides diffvar paf {1};
+         paf_infinity {1} = 1{1}/(1{1}+exp((V+10.22{mV})/-8.5{mV}));
+         tau_paf {s} = 1{1}/(17{1/s}*exp(0.0398{1/mV}*V)+0.211{1/s}*exp(-0.051{1/mV}*V));
+         paf.init {1} = 0.192515363116553;
+         paf.diff = (paf_infinity-paf)/tau_paf;
+      }
+      subsystem rapid_delayed_rectifier_potassium_current_pas_gate {
+         provides diffvar pas {1};
+         pas_infinity {1} = 1{1}/(1{1}+exp((V+10.22{mV})/-8.5{mV}));
+         tau_pas {s} = (0.33581{s}+0.90673{s}*exp(-pow((V+10{mV}),2{1})/988.05{mV^2}));
+         pas.init {1} = 0.0797182955833868;
+         pas.diff = (pas_infinity-pas)/tau_pas;
+      }
+      subsystem rapid_delayed_rectifier_potassium_current_pik_gate {
+         provides diffvar pik {1};
+         alpha_pik {1/s} = 92.01{1/s}*exp(-0.0183{1/mV}*V);
+         beta_pik {1/s} = 603.6{1/s}*exp(0.00942{1/mV}*V);
+         pik_infinity {1} = 1{1}/(1{1}+exp((V+4.9{mV})/15.14{mV}))*(1{1}-0.3{1}*exp(-pow(V,2{1})/500{mV^2}));
+         tau_pik {s} = 1{1}/(alpha_pik+beta_pik);
+         pik.init {1} = 0.949023698965401;
+         pik.diff = (pik_infinity-pik)/tau_pik;
+      }
+      E_K {mV} = RTONF*log(Kc/Ki);
+      if (cell_type == N) {
+         g_Kr {uS} = 0.0035;
+      } else if (cell_type == NH) {
+         g_Kr {uS} = 0.002;
+      } else {
+         g_Kr {uS} = 0.0015;
+      }
+      provides accum Iion_sum += g_Kr*(0.9{1}*paf+0.1{1}*pas)*pik*(V-E_K);
+   }
+   subsystem sodium_calcium_exchange_current {
+      K1ni {mmol/L} = 395.3;
+      K1no {mmol/L} = 1628;
+      K2ni {mmol/L} = 2.289;
+      K2no {mmol/L} = 561.4;
+      K3ni {mmol/L} = 26.44;
+      K3no {mmol/L} = 4.663;
+      Kci {mmol/L} = 0.0207;
+      Kcni {mmol/L} = 26.44;
+      Kco {mmol/L} = 3.663;
+      Qci {1} = 0.1369;
+      Qco {1} = 0;
+      Qn {1} = 0.4315;
+      if (cell_type == N) {
+         kNaCa {nA} = 2.14455;
+      } else {
+         kNaCa {nA} = 5.916;
+      }
+      di {1} = (1{1}+Casub/Kci*(1{1}+exp(-Qci*V/RTONF)+Nai/Kcni)+Nai/K1ni+pow(Nai,2{1})/(K1ni*K2ni)+pow(Nai,3{1})/(K1ni*K2ni*K3ni));
+      do_ {1} = (1{1}+Cao/Kco*(1{1}+exp(Qco*V/RTONF))+Nao/K1no+pow(Nao,2{1})/(K1no*K2no)+pow(Nao,3{1})/(K1no*K2no*K3no));
+      k32 {1} = exp(Qn*V/(2{1}*RTONF));
+      k34 {1} = Nao/(K3no+Nao);
+      k41 {1} = exp(-Qn*V/(2{1}*RTONF));
+      k43 {1} = Nai/(K3ni+Nai);
+      k12 {1} = Casub/Kci*exp(-Qci*V/RTONF)/di;
+      k14 {1} = (pow(Nai,2{1})/(K1ni*K2ni)+pow(Nai,3{1})/(K1ni*K2ni*K3ni))*exp(Qn*V/(2{1}*RTONF))/di;
+      k21 {1} = Cao/Kco*exp(-Qco*V/RTONF)/do_;
+      k23 {1} = (pow(Nao,2{1})/(K1no*K2no)+pow(Nao,3{1})/(K1no*K2no*K3no))*exp(-Qn*V/(2{1}*RTONF))/do_;
+      x1 {1} = (k41*k34*(k23+k21)+k21*k32*(k43+k41));
+      x2 {1} = (k32*k43*(k14+k12)+k41*k12*(k34+k32));
+      x3 {1} = (k14*k43*(k23+k21)+k12*k23*(k43+k41));
+      x4 {1} = (k23*k34*(k14+k12)+k14*k21*(k34+k32));
+      provides i_NaCa {nA} = kNaCa*(x2*k21-x1*k12)/(x1+x2+x3+x4);
+      provides accum Iion_sum += i_NaCa;
+   }
+}
+
+subsystem inada_not_N {
+   subsystem fast_sodium_current {
+      provides E_Na {mV};
+      shared h1 {1};
+      shared h2 {1};
+      shared m {1};
+      subsystem fast_sodium_current_h1_gate {
+         provides diffvar h1 {1};
+         alpha_h1 {1/s} = 44.9{1/s}*exp((V+66.9{mV})/-5.57{mV});
+         beta_h1 {1/s} = 1491{1/s}/(1{1}+323.3{1}*exp((V+94.6{mV})/-12.9{mV}));
+         tau_h1 {s} = (0.03{s}/(1{1}+exp((V+40{mV})/6{mV}))+0.00035{s});
+         h1_inf {1} = alpha_h1/(alpha_h1+beta_h1);
+         h1.init {1} = 0.0243210273637729;
+         h1.diff = (h1_inf-h1)/tau_h1;
+      }
+      subsystem fast_sodium_current_h2_gate {
+         provides diffvar h2 {1};
+         alpha_h2 {1/s} = 44.9{1/s}*exp((V+66.9{mV})/-5.57{mV});
+         beta_h2 {1/s} = 1491{1/s}/(1{1}+323.3{1}*exp((V+94.6{mV})/-12.9{mV}));
+         tau_h2 {s} = (0.12{s}/(1{1}+exp((V+60{mV})/2{mV}))+0.00295{s});
+         h2_inf {1} = alpha_h2/(alpha_h2+beta_h2);
+         h2.init {1} = 0.0157156121147801;
+         h2.diff = (h2_inf-h2)/tau_h2;
+      }
+      subsystem fast_sodium_current_m_gate {
+         provides diffvar m {1};
+         E0_m {mV} = (V+44.4{mV});
+         delta_m {mV} = 1e-5;
+         alpha_m {1/s} = ((fabs(E0_m) < delta_m) ? -460{1/s}*-12.673{1}/(exp(E0_m/-12.673{mV})) : -460{1/s/mV}*E0_m/(exp(E0_m/-12.673{mV})-1{1}));
+         beta_m {1/s} = 18400{1/s}*exp(E0_m/-12.673{mV});
+         m.init {1} = 0.143642247226618;
+         m.diff = (alpha_m*(1{1}-m)-beta_m*m);
+      }
+      E_Na {mV} = RTONF*log(Nao/Nai);
+      g_Na {uL/s} = 5e-7;
+      provides accum Iion_sum += g_Na*pow(m,3{1})*(0.635{1}*h1+0.365{1}*h2)*Nao*V*F/RTONF*(exp((V-E_Na)/RTONF)-1{1})/(exp(V/RTONF)-1{1});
+   }
+
+   subsystem time_independent_potassium_current {
+      if (cell_type == NH) {
+         g_K1 {uS} = 0.015;
+      } else {
+         g_K1 {uS} = 0.0125;
+      }
+      g_K1_prime {uS} = g_K1*(0.5{1}+0.5{1}/(1{1}+exp((V+30{mV})/5{mV})));
+      provides accum Iion_sum += g_K1_prime*pow(Kc/(Kc+0.59{mmol/L}),3{1})*(V+81.9{mV})/(1{1}+exp(1.393{1}*(V+81.9{mV}+3.6{mV})/RTONF));
+   }
+
+   subsystem transient_outward_potassium_current {
+      provides E_K {mV};
+      shared q_fast {1};
+      shared q_slow {1};
+      shared r {1};
+      subsystem transient_outward_potassium_current_qfast_gate {
+         provides diffvar q_fast {1};
+         qfast_infinity {1} = 1{1}/(1{1}+exp((V+33.8{mV})/6.12{mV}));
+         tau_qfast {s} = (12.66e-3{s}+4.72716{s}/(1{1}+exp((V+154.5{mV})/23.96{mV})));
+         q_fast.init {1} = 0.899732315818241;
+         q_fast.diff = (qfast_infinity-q_fast)/tau_qfast;
+      }
+      subsystem transient_outward_potassium_current_qslow_gate {
+         provides diffvar q_slow {1};
+         qslow_infinity {1} = 1{1}/(1{1}+exp((V+33.8{mV})/6.12{mV}));
+         tau_qslow {s} = (0.1{s}+4{s}*exp(-pow((V+65{mV}),2{1})/500{mV^2}));
+         q_slow.init {1} = 0.190111737767474;
+         q_slow.diff = (qslow_infinity-q_slow)/tau_qslow;
+      }
+      subsystem transient_outward_potassium_current_r_gate {
+         provides diffvar r {1};
+         r_infinity {1} = 1{1}/(1{1}+exp((V-7.44{mV})/-16.4{mV}));
+         tau_r {s} = (0.596e-3{s}+3.118e-3{s}/(1.037{1}*exp(0.09{1/mV}*(V+30.61{mV}))+0.396{1}*exp(-0.12{1/mV}*(V+23.84{mV}))));
+         r.init {1} = 0.0296516611999521;
+         r.diff = (r_infinity-r)/tau_r;
+      }
+      E_K {mV} = RTONF*log(Kc/Ki);
+      if (cell_type == NH) {
+         g_to {uS} = 0.014;
+      } else {
+         g_to {uS} = 0.02;
+      }
+      provides accum Iion_sum += g_to*r*(0.45{1}*q_fast+0.55{1}*q_slow)*(V-E_K);
+   }
+}
+   
+subsystem inada_N_only {
+   subsystem hyperpolarising_activated_current {
+      shared y {1};
+      subsystem hyperpolarising_activated_current_y_gate {
+         provides diffvar y {1};
+         tau_y {s} = (0.25{s}+2{s}*exp(-pow((V+70{mV}),2{1})/500{mV^2}));
+         y_inf {1} = 1{1}/(1{1}+exp(((V+83.19{mV})--7.2{mV}*pow(ACh,0.69{1})/(pow(1.26e-5{mmol/L},0.69{1})+pow(ACh,0.69{1})))/13.56{mV}));
+         y.init {1} = 0.0462303183096481;
+         y.diff = (y_inf-y)/tau_y;
+      }
+      g_f {uS} = 0.001;
+      provides accum Iion_sum += y*g_f*(V- -30{mV});
+   }
+   subsystem sustained_outward_potassium_current {
+      shared qa {1};
+      shared qi {1};
+      subsystem sustained_outward_potassium_current_qa_gate {
+         provides diffvar qa {1};
+         alpha_qa {1/s} = 1{1}/(0.15{s}*exp(-V/11{mV})+0.2{s}*exp(-V/700{mV}));
+         beta_qa {1/s} = 1{1}/(16{s}*exp(V/8{mV})+15{s}*exp(V/50{mV}));
+         qa_infinity {1} = 1{1}/(1{1}+exp((V--49.1{mV})/-8.98{mV}));
+         tau_qa {s} = 0.001{1}/(alpha_qa+beta_qa);
+         qa.init {1} = 0.476404610622697;
+         qa.diff = (qa_infinity-qa)/tau_qa;
+      }
+      subsystem sustained_outward_potassium_current_qi_gate {
+         provides diffvar qi {1};
+         alpha_qi {1/s} = 0.1504{1}/(3100{s}*exp(V/13{mV})+700{s}*exp(V/70{mV}));
+         beta_qi {1/s} = (0.1504{1}/(95{s}*exp(-V/10{mV})+50{s}*exp(-V/700{mV}))+0.000229{1/s}/(1{1}+exp(-V/5{mV})));
+         qi_infinity {1} = alpha_qi/(alpha_qi+beta_qi);
+         tau_qi {s} = 0.001{1}/(alpha_qi+beta_qi);
+         qi.init {1} = 0.542303657353244;
+         qi.diff = (qi_infinity-qi)/tau_qi;
+      }
+      E_st {mV} = -37.4;
+      g_st {uS} = 0.0001;
+         
+      provides accum Iion_sum += g_st*qa*qi*(V-E_st);
+   }
+
+}
+
+subsystem inada_N {
+   use inada_N_switch;
+   use inada_base;
+   use inada_N_only;
+}
+
+subsystem inada_NH {
+   use inada_NH_switch;
+   use inada_base;
+   use inada_not_N;
+}
+
+subsystem inada_AN {
+   use inada_AN_switch;
+   use inada_base;
+   use inada_not_N;
+}
