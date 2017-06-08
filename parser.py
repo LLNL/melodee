@@ -1854,7 +1854,12 @@ class MelodeeParser:
         p[0] = self.convertUnitTo(p[3], p[5])
     def p_functionExpr_func(self, p):
         '''functionExpr : NAME '(' funcArgListOpt ')' '''
-        p[0] = AST(getattr(sympy,p[1])(*[x.sympy for x in p[3]]), self.nodim())
+        functionName = p[1]
+        if 0:
+            pass
+        elif functionName == "fabs":
+            functionName = "Abs"
+        p[0] = AST(getattr(sympy,functionName)(*[x.sympy for x in p[3]]), self.nodim())
     def p_funcArgListOpt_zero(self, p):
         '''funcArgListOpt : empty'''
         p[0] = []
