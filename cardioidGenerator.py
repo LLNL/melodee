@@ -205,6 +205,7 @@ namespace scanReaction
 #include "%(target)s.hh"
 #include "object_cc.hh"
 #include <cmath>
+#include <cassert>
 
 using namespace std;
 
@@ -329,7 +330,7 @@ void ThisReaction::calc(double dt, const VectorDouble32& __Vm,
       if (1) 
       {
          bool foundError=false;
-#define CHECK_BLOWUP(x) do { if (!isfinite(x)) { fprintf(stderr, "Error in node %%d, variable " #x " = %%g\n", ii, (x)); foundError=true; } } while(0)
+#define CHECK_BLOWUP(x) do { if (!isfinite(x)) { fprintf(stderr, "Error in node %%d, variable " #x " = %%g\n", __ii, (x)); foundError=true; } } while(0)
          CHECK_BLOWUP(Iion);
             
          //EDIT_STATE''', template)
@@ -343,7 +344,7 @@ void ThisReaction::calc(double dt, const VectorDouble32& __Vm,
          
          if (foundError) 
          {
-#define PRINT_STATE(x) do { fprintf(stderr, "node %%d: " #x " = %%g\n", ii, (x)); } while(0)
+#define PRINT_STATE(x) do { fprintf(stderr, "node %%d: " #x " = %%g\n", __ii, (x)); } while(0)
             //EDIT_STATE''', template)
     out.inc(4)
     for var in order(diffvars):
@@ -375,7 +376,7 @@ void ThisReaction::calc(double dt, const VectorDouble32& __Vm,
 
 void ThisReaction::initializeMembraneVoltage(VectorDouble32& __Vm)
 {
-   assert(Vm.size() >= nCells_);
+   assert(__Vm.size() >= nCells_);
 
 ''', template)
     out.inc()
