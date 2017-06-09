@@ -103,6 +103,83 @@ class MelodeeParser:
     def getModel(self, target):
         return self._parser.getModel(target)
 
+class Differentiator:
+    '''This class differentiates a ConsolidatedSystem, caching results as
+    needed.  It can also commit the derivatives into the target
+    Consolidated system.
+    '''
+    def __init__(self, cs, independentVars):
+        self.cs = cs
+        self.independentVars = independentVars
+        self.cache = {}
+        self.zero = AST(sympy.sympify("0"),ASTUnit.null())
+        self.one = AST(sympy.sympify("1"),ASTUnit.null())
+        self.epsilon = Symbol("epsilon")
+
+    def cacheResult(self, var, wrt, resultVar, expr):
+        self.cache.setdefault(var, {})[wrt] = (resultVar, expr)
+        return (resultVar, expr)
+        
+    def diff(self, var, wrt):
+        if self.cache.get(var, {}).get(wrt, None) != None:
+            return self.cache[var][wrt]
+
+        resultVar = Symbol("_d_%s_wrt_%s" %(var,wrt))
+        
+        if var == wrt:
+            return self.cacheResult(var,wrt,resultVar,self.one)
+        if var in self.independentVars:
+            return self.cacheResult(var,wrt,resultVar,self.zero)
+
+        ast = self.cs.ssa[var]
+        if isinstance(ast, Choice):
+            (thenVar, thenExpr) = self.diff(ast.thenVar,wrt)
+            (elseVar, elseExpr) = self.diff(ast.elseVar,wrt)
+            if thenExpr == elseExpr:
+                return self.cacheResult(var,wrt,resultVar,thenExpr)
+            else:
+                resultAst = Choice(ast.ifVar,thenVar,elseVar,
+                                   ASTUnit.null()
+                                   )
+                return self.cacheResult(var,wrt,resultVar,resultAst)
+        else:
+            deps = ast.dependencies()
+            subMap = {}
+            for dep in deps:
+                (diffVar,diffExpr) = self.diff(dep,wrt)
+                result=None
+                if not isinstance(diffExpr, Choice):
+                    if diffExpr.sympy==self.zero.sympy:
+                        result = dep
+                    elif diffExpr.sympy==self.one.sympy:
+                        result = dep + self.epsilon
+                if result==None:
+                    result = dep + self.epsilon * diffVar
+                subMap[dep] = result
+            diffSympy = ast.sympy.subs(subMap)
+            diffSympy = diffSympy.diff(self.epsilon).subs(self.epsilon,0)
+            diffAst = AST(diffSympy,ASTUnit.null())
+            return self.cacheResult(var,wrt,resultVar,diffAst)
+
+    def _augmentInstructions(self,instructions):
+        newInstructions = []
+        for inst in instructions:
+            if isinstance(inst, IfInstruction):
+                newThenList = self._augmentInstructions(inst.thenInstructions)
+                newElseList = self._augmentInstructions(inst.elseInstructions)
+                newChoiceList = self._augmentInstructions(inst.choiceInstructions)
+                newInstructions.append(IfInstruction(inst.ifVar,newThenList,newElseList,newChoiceList))
+            else:
+                newInstructions.append(inst)
+                if inst in self.cache:
+                    for (dontcare, (diffvar, diffexpr)) in self.cache[inst].items():
+                        newInstructions.append(diffvar)
+                        self.cs.ssa[diffvar] = diffexpr
+        return newInstructions
+
+    def augmentInstructions(self):
+        self.cs.instructions = self._augmentInstructions(self.cs.instructions)
+
 #############################################################################
 
 class XXXSyntaxError(SyntaxError):

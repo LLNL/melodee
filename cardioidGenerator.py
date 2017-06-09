@@ -27,7 +27,7 @@ import sys
 import re
 from sympy.printing.ccode import ccode
 
-from parser import MelodeeParser
+from parser import MelodeeParser,Differentiator
 import utility
 from utility import order
 
@@ -106,6 +106,7 @@ def generateCardioid(model, targetName, headerFile, sourceFile):
 
     params = model.varsWithAttribute("param")
     diffvars = model.diffvars()
+    gates = model.varsWithAttribute("gate") & diffvars
     diffvarUpdate = {var : model.diffvarUpdate(var) for var in diffvars}
     #gatevars = model.getVars("gate")
     #tracevars = model.getVars("trace")
@@ -114,6 +115,11 @@ def generateCardioid(model, targetName, headerFile, sourceFile):
     V_init = model.output("V_init")
     Iion = model.output("Iion")
 
+    differ = Differentiator(model, diffvars | params | set([V]))
+    gateJacobians = {}
+    for gate in gates:
+        (gateJacobians[gate],dontcare) = differ.diff(diffvarUpdate[gate],gate)
+    differ.augmentInstructions()
     
     out = headerFile
     out('''
@@ -311,7 +317,7 @@ void ThisReaction::calc(double dt, const VectorDouble32& __Vm,
     good |= diffvars
     good.add(V)
 
-    target = set(diffvarUpdate.values())
+    target = set(diffvarUpdate.values()) | set(gateJacobians.values())
     target.add(Iion)
     cprinter = CPrintVisitor(out, model.ssa, params)
     model.printTarget(good,target,cprinter)
@@ -353,8 +359,15 @@ void ThisReaction::calc(double dt, const VectorDouble32& __Vm,
       
       //EDIT_STATE''', template)
     out.inc(2)
-    for var in order(diffvars):
+    for var in order(diffvars-gates):
         out('state_[__ii].%s += dt*%s;',pretty(var),pretty(diffvarUpdate[var]))
+    for var in order(gates):
+        out('state_[__ii].%(v)s += %(d)s/%(j)s*expm1(dt*%(j)s);',
+            v=pretty(var),
+            d=pretty(diffvarUpdate[var]),
+            j=gateJacobians[var],
+        )
+                     
     out.dec(2)
     out('''      
    }
