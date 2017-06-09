@@ -256,7 +256,7 @@ const char* varUnits[] =
 {''', template)
     out.inc()
     #varUnits = ['"'+units[var]+'"' for var in order(diffvars)]
-    varUnits = ['"1"' for var in order(diffvars)]
+    varUnits = ['"%s"'%str(model.ssa[var].astUnit.rawUnit) for var in order(diffvars)]
     out(",\n".join(varUnits))
     out.dec()
     out('''

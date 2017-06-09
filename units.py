@@ -75,7 +75,7 @@ class Unit:
         ret.scale = ret.scale*number
         return ret
     def __str__(self):
-        return "["+str(self.scale)+" ,"+str(self.bases)+"]"
+        return self.system.strify(self)
     def __repr__(self):
         return 'Unit(si,'+repr(self.bases)+','+repr(self.scale)+')'
     def convertTo(self, other):
@@ -102,6 +102,48 @@ class UnitSystem:
         return Unit(self, {}, math.log10(scale))
     def get(self, unitName):
         return self.knownUnits[unitName]
+    def strify(self, unit):
+        '''find the smallest unit expr by greedy gradient descent'''
+        def unitDot(xxx,yyy):
+            allBases = set(xxx.bases.keys()) | set(yyy.bases.keys())
+            dotp = xxx.scale*yyy.scale
+            for base in allBases:
+                dotp += xxx.bases.get(base, 0)*yyy.bases.get(base, 0)
+            return dotp
+        numerator = []
+        denominator = []
+        remainder = unit
+        while unitDot(remainder,remainder) > 0:
+            maxUnitName = None
+            maxUnitDot = 0
+            for (thisName,thisUnit) in self.knownUnits.items():
+                thisSize = math.sqrt(unitDot(thisUnit,thisUnit))
+                if thisSize==0:
+                    continue
+                thisUnitDot = unitDot(remainder,thisUnit)/thisSize
+                if (maxUnitName == None or
+                    abs(thisUnitDot) > abs(maxUnitDot) or
+                    (abs(thisUnitDot) == abs(maxUnitDot) and
+                     len(thisName) < len(maxUnitName)
+                     )):
+                    maxUnitDot = thisUnitDot
+                    maxUnitName = thisName
+            assert(maxUnitName != None)
+            if maxUnitDot > 0:
+                numerator.append(maxUnitName)
+                remainder = remainder / self.get(maxUnitName)
+            else:
+                denominator.append(maxUnitName)
+                remainder = remainder * self.get(maxUnitName)
+        if not numerator and not denominator:
+            return "1"
+        elif numerator and not denominator:
+            return "*".join(numerator)
+        elif not numerator and denominator:
+            return "1/"+"/".join(denominator)
+        else:
+            return "*".join(numerator)+"/"+"/".join(denominator)
+
     def __getattr__(self, name):
         try:
             return self.get(name)
@@ -214,7 +256,7 @@ class Si(UnitSystem):
         }
         for longName in longNames:
             for (prefix, scale) in longPrefixes.items():
-                self.register(prefix+longName, self.get(longName)*Unit(self, {}, scale))
+                self.register(prefix+longName, self.get(longName)*self.scaleToUnit(scale))
 
         self.register('cc', self.cm**3)
 
