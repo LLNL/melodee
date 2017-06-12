@@ -136,7 +136,7 @@ def generateCardioid(model, targetName, headerFile, sourceFile):
     diffvarUpdate = {var : model.diffvarUpdate(var) for var in diffvars}
     params = model.varsWithAttribute("param")
     gates = model.varsWithAttribute("gate") & diffvars
-    polyfits = model.varsWithAttribute("polyfit")
+    polyfits = model.varsWithAttribute("interp")
     
     V = model.input("V")
     V_init = model.output("V_init")
@@ -162,22 +162,23 @@ def generateCardioid(model, targetName, headerFile, sourceFile):
     computeTargets = set()
     computeTargets.add(Iion)
     computeTargets |= set([diffvarUpdate[var] for var in diffvars-gates])
-    for var in gates:
+    for gate in gates:
         (RLA,RLB) = gateTargets[gate]
         computeTargets.add(RLA)
         computeTargets.add(RLB)
 
-    statevars = model.inputs()|diffvars
-    constants = model.allExcluding(set([dt]), statevars)
+    computeAllDepend = model.allDependencies(set([dt,V])|diffvars, computeTargets)
 
-    computeAllDepend = model.allDependencies(set([dt,V]), computeTargets)
+    statevars = model.inputs()|diffvars
+    constants = model.allExcluding(set([dt]), statevars) & computeAllDepend
+
     polyfitTargets = {}
-    polyfitCandidates = {}
     for fit in polyfits:
         good = set([fit,dt])
         dependsOnlyOnFit = model.allExcluding(good, statevars-good)
         polyfitCandidates = (dependsOnlyOnFit & computeAllDepend) - constants
         polyfitTargets[fit] = set()
+        polyfitTargets[fit] |= computeTargets & polyfitCandidates
         for var in computeAllDepend-polyfitCandidates:
             polyfitTargets[fit] |= model.dependencies(var) & polyfitCandidates
 
@@ -214,6 +215,7 @@ namespace %(target)s
       ThisReaction(const int numPoints, const double __dt);
       std::string methodName() const;
       
+      void createInterpolants(const double _dt);
       void calc(double dt,
                 const VectorDouble32& Vm,
                 const std::vector<double>& iStim,
@@ -242,7 +244,15 @@ namespace %(target)s
     private:
       unsigned nCells_;
       std::vector<State> state_;
-      double __cachedDt;
+      double __cachedDt;''', template)
+    out.inc(2)
+    for fit in polyfits:
+        for var in order(polyfitTargets[fit]):
+            out("Interpolant _interp_%s;", pretty(var))
+    out.dec(2)
+    out('''
+
+      
    };
 }
 
@@ -298,6 +308,8 @@ namespace scanReaction
     out.dec(2)
     out('''
       
+      reaction->createInterpolants(_dt);
+
       return reaction;
    }
 #undef setDefault
@@ -384,6 +396,10 @@ void ThisReaction::calc(double _dt, const VectorDouble32& __Vm,
         out('const double %s=state_[__ii].%s;',pretty(var),pretty(var))
     good |= diffvars
     good.add(V)
+
+    for fit in polyfits:
+        for var in polyfitTargets[fit]:
+            good.add(var)
 
     cprinter = CPrintVisitor(out, model.ssa, params)
     model.printTarget(good,computeTargets,cprinter)

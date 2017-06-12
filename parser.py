@@ -61,23 +61,23 @@ class ConsolidatedSystem:
             front = newFront
         return depend
 
-    def allExcluding(self,reachable,bad,instructions=None):
+    def allExcluding(self,origReachable,bad,instructions=None):
         if instructions == None:
             instructions = self.instructions
-        reachable = set(reachable)
+        reachable = set(origReachable)
         for inst in instructions:
             if isinstance(inst, IfInstruction):
                 if inst.ifVar not in reachable:
                     continue
-                reachable |= self.allExcluding(bad,reachable,inst.thenInstructions)
-                reachable |= self.allExcluding(bad,reachable,inst.elseInstructions)
-                reachable |= self.allExcluding(bad,reachable,inst.choiceInstructions)
+                reachable |= self.allExcluding(reachable,bad,inst.thenInstructions)
+                reachable |= self.allExcluding(reachable,bad,inst.elseInstructions)
+                reachable |= self.allExcluding(reachable,bad,inst.choiceInstructions)
             else:
-                if inst in bad:
-                    continue
-                if self.dependencies(inst)<reachable:
+                if (inst not in reachable and
+                    inst not in bad and
+                    self.dependencies(inst)<=reachable):
                     reachable.add(inst)
-        return reachable
+        return reachable-origReachable
 
     def printTarget(self, good, target, printVisitor):
         allUpdate = self.allDependencies(good, target)
@@ -216,6 +216,38 @@ class Differentiator:
     def augmentInstructions(self):
         self.cs.instructions = self._augmentInstructions(self.cs.instructions)
 
+
+# def yyy(model, expr):
+#     if not expr.args:
+#         return expr
+#     newArgs = (yyy(model, arg) for arg in expr.args)
+#     newExpr = expr.func(*newArgs)
+#     if isinstance(expr, sympy.Function):
+#         return model.addInstruction("_expensive_function",newExpr) 
+#     else:
+#         return newExpr
+
+# def extractExpensiveFunctions(model, instructions=None):
+#     topLevel=False
+#     if instructions==None:
+#         instructions = model.instructions
+#         topLevel=True
+#         newInstructions = []
+#     for inst in instructions:
+#         if isinstance(inst, IfInstruction):
+#             newThenList = extractExpensiveFunctions(model,inst.thenInstructions)
+#             newElseList = extractExpensiveFunctions(model,inst.elseInstructions)
+#             newInstructions.append(IfInstruction(inst.ifVar,newThenList,newElseList,inst.choiceInstructions))
+#         else:
+#             def sympyRecurse(expr, newInstructions=newInstructions):
+#                 expr
+                
+#             newInstructions.append(inst)
+#     if topLevel:
+#         model.instructions = newInstructions
+#     return newInstructions
+
+        
 #############################################################################
 
 class XXXSyntaxError(SyntaxError):
@@ -1571,7 +1603,7 @@ class InternalMelodeeParser:
         | ','
         | '@'
         '''
-        p[0] = p[1].value
+        p[0] = p[1]
 
     def p_subSystemStatement_singleDeclaration(self, p):
         '''subSystemStatement : declaration declList ';' '''

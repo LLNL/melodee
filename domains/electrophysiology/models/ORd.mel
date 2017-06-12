@@ -31,7 +31,7 @@ shared Iion {uA/uF};
 shared V_init {mV};
 
 subsystem ORd {
-   provides v {mV} =V;
+   provides @interp(-1000,1000,1e-2) v {mV} = V;
    provides V_init = -85;
 
    diffvar nai {mM};
