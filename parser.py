@@ -153,7 +153,7 @@ class Differentiator:
         if isinstance(ast, Choice):
             (thenVar, thenExpr) = self.diff(ast.thenVar,wrt)
             (elseVar, elseExpr) = self.diff(ast.elseVar,wrt)
-            if thenExpr == elseExpr:
+            if thenExpr.sympy == elseExpr.sympy:
                 return self.cacheResult(var,wrt,resultVar,thenExpr)
             else:
                 resultAst = Choice(ast.ifVar,thenVar,elseVar,
@@ -185,7 +185,16 @@ class Differentiator:
             if isinstance(inst, IfInstruction):
                 newThenList = self._augmentInstructions(inst.thenInstructions)
                 newElseList = self._augmentInstructions(inst.elseInstructions)
-                newChoiceList = self._augmentInstructions(inst.choiceInstructions)
+                newChoiceList = []
+                for choice in inst.choiceInstructions:
+                    newChoiceList.append(choice)
+                    if choice in self.cache:
+                        for (dontcare, (diffvar,diffexpr)) in self.cache[choice].items():
+                            if isinstance(diffexpr, Choice):
+                                newChoiceList.append(diffvar)
+                            else:
+                                newInstructions.append(diffvar)
+                            self.cs.ssa[diffvar] = diffexpr
                 newInstructions.append(IfInstruction(inst.ifVar,newThenList,newElseList,newChoiceList))
             else:
                 newInstructions.append(inst)
