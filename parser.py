@@ -113,6 +113,15 @@ class ConsolidatedSystem:
     def info(self, name, symbol):
         return self._namedVariables[name][symbol]
 
+    def addSymbol(self, name):
+        return Symbol(name)
+    
+    def addInstruction(self, name, sympy):
+        var = self.addSymbol(name)
+        self.instructions.append(var)
+        self.ssa[var] = AST(sympy,ASTUnit.null())
+        return var
+
 class MelodeeParser:
     def __init__(self, *args, **kwargs):
         self._parser = InternalMelodeeParser(*args, **kwargs)

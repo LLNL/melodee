@@ -148,17 +148,33 @@ def generateCardioid(model, targetName, headerFile, sourceFile):
         (gateJacobians[gate],dontcare) = differ.diff(diffvarUpdate[gate],gate)
     differ.augmentInstructions()
 
-    computeTargets = set(diffvarUpdate.values()) | set(gateJacobians.values())
+    dt = model.addSymbol("_dt")
+    gateTargets = {}
+    for gate in gates:
+        F = model.ssa[diffvarUpdate[gate]].sympy
+        L = model.ssa[gateJacobians[gate]].sympy
+        M = (F-L*gate).simplify()
+        
+        RLA = model.addInstruction("_%s_RLA" % gate, sympy.exp(dt*L))
+        RLB = model.addInstruction("_%s_RLB" % gate, M/L*(sympy.exp(dt*L)-1))
+        gateTargets[gate] = (RLA,RLB)
+
+    computeTargets = set()
     computeTargets.add(Iion)
+    computeTargets |= set([diffvarUpdate[var] for var in diffvars-gates])
+    for var in gates:
+        (RLA,RLB) = gateTargets[gate]
+        computeTargets.add(RLA)
+        computeTargets.add(RLB)
 
     statevars = model.inputs()|diffvars
-    constants = model.allExcluding(set(), statevars)
-    
-    computeAllDepend = model.allExcluding(set(), computeTargets)
+    constants = model.allExcluding(set([dt]), statevars)
+
+    computeAllDepend = model.allDependencies(set([dt,V]), computeTargets)
     polyfitTargets = {}
     polyfitCandidates = {}
     for fit in polyfits:
-        good = set([fit])
+        good = set([fit,dt])
         dependsOnlyOnFit = model.allExcluding(good, statevars-good)
         polyfitCandidates = (dependsOnlyOnFit & computeAllDepend) - constants
         polyfitTargets[fit] = set()
@@ -195,7 +211,7 @@ namespace %(target)s
    class ThisReaction : public Reaction
    {
     public:
-      ThisReaction(const int numPoints);
+      ThisReaction(const int numPoints, const double __dt);
       std::string methodName() const;
       
       void calc(double dt,
@@ -226,12 +242,13 @@ namespace %(target)s
     private:
       unsigned nCells_;
       std::vector<State> state_;
+      double __cachedDt;
    };
 }
 
 namespace scanReaction 
 {
-   Reaction* scan%(target)s(OBJECT* obj, const int numPoints);
+    Reaction* scan%(target)s(OBJECT* obj, const int numPoints, const double __dt);
 }
 ''', template)
 
@@ -266,14 +283,14 @@ namespace scanReaction
 
 #define setDefault(name, value) objectGet(obj, #name, reaction->name, #value)
    
-   Reaction* scan%(target)s(OBJECT* obj, const int numPoints)
+    Reaction* scan%(target)s(OBJECT* obj, const int numPoints, const double _dt)
    {
-      %(target)s::ThisReaction* reaction = new %(target)s::ThisReaction(numPoints);
+      %(target)s::ThisReaction* reaction = new %(target)s::ThisReaction(numPoints, _dt);
 
       //override the defaults
       //EDIT_PARAMETERS''', template)
     out.inc(2)
-    good = set()
+    good = set([dt])
     cprinter = CPrintVisitor(out, model.ssa, params)
     paramPrinter = ParamPrintVisitor(out, cprinter, params)
     model.printTarget(good, params, paramPrinter)
@@ -342,16 +359,17 @@ void assertStateOrderAndVarNamesAgree(void)
     out('''
 }
    
-ThisReaction::ThisReaction(const int numPoints)
+    ThisReaction::ThisReaction(const int numPoints, const double __dt)
 : nCells_(numPoints)
 {
    assertStateOrderAndVarNamesAgree();
    state_.resize(nCells_);
    perCellFlags_.resize(nCells_);
    perCellParameters_.resize(nCells_);
+   __cachedDt = __dt;
 }
 
-void ThisReaction::calc(double dt, const VectorDouble32& __Vm,
+void ThisReaction::calc(double _dt, const VectorDouble32& __Vm,
                        const vector<double>& __iStim , VectorDouble32& __dVm)
 {
    for (unsigned __ii=0; __ii<nCells_; ++__ii)
@@ -408,12 +426,13 @@ void ThisReaction::calc(double dt, const VectorDouble32& __Vm,
       //EDIT_STATE''', template)
     out.inc(2)
     for var in order(diffvars-gates):
-        out('state_[__ii].%s += dt*%s;',pretty(var),pretty(diffvarUpdate[var]))
+        out('state_[__ii].%s += _dt*%s;',pretty(var),pretty(diffvarUpdate[var]))
     for var in order(gates):
-        out('state_[__ii].%(v)s += %(d)s/%(j)s*expm1(dt*%(j)s);',
+        (RLA,RLB) = gateTargets[var]
+        out('state_[__ii].%(v)s = %(a)s*%(v)s + %(b)s;',
             v=pretty(var),
-            d=pretty(diffvarUpdate[var]),
-            j=gateJacobians[var],
+            a=pretty(RLA),
+            b=pretty(RLB),
         )
                      
     out.dec(2)
@@ -422,7 +441,7 @@ void ThisReaction::calc(double dt, const VectorDouble32& __Vm,
    }
 }
 
-void ThisReaction::updateNonGate(double dt, const VectorDouble32& __Vm, VectorDouble32& __dVR)
+void ThisReaction::updateNonGate(double _dt, const VectorDouble32& __Vm, VectorDouble32& __dVR)
 {
    assert(__Vm.size() >= nCells_);
    for (unsigned __ii=0; __ii<nCells_; ++__ii)
@@ -479,7 +498,7 @@ void ThisReaction::updateNonGate(double dt, const VectorDouble32& __Vm, VectorDo
       //EDIT_STATE''', template)
     out.inc(2)
     for var in order(diffvars-gates):
-        out('state_[__ii].%s += dt*%s;',pretty(var),pretty(diffvarUpdate[var]))
+        out('state_[__ii].%s += _dt*%s;',pretty(var),pretty(diffvarUpdate[var]))
                      
     out.dec(2)
     out('''
@@ -487,7 +506,7 @@ void ThisReaction::updateNonGate(double dt, const VectorDouble32& __Vm, VectorDo
    }
 }
 
-void ThisReaction::updateGate(double dt, const VectorDouble32& __Vm)
+void ThisReaction::updateGate(double _dt, const VectorDouble32& __Vm)
 {
    assert(__Vm.size() >= nCells_);
    for (unsigned __ii=0; __ii<nCells_; ++__ii)
@@ -500,7 +519,7 @@ void ThisReaction::updateGate(double dt, const VectorDouble32& __Vm)
         out('const double %s=state_[__ii].%s;',pretty(var),pretty(var))
 
     targets = set([diffvarUpdate[var] for var in gates])
-    targets |= set([gateJacobians[var] for var in gates])
+    targets |= set([gateTargets[var] for var in gates])
     
     cprinter = CPrintVisitor(out, model.ssa, params)
     model.printTarget(good,targets,cprinter)
@@ -542,10 +561,11 @@ void ThisReaction::updateGate(double dt, const VectorDouble32& __Vm)
       //EDIT_STATE''', template)
     out.inc(2)
     for var in order(gates):
-        out('state_[__ii].%(v)s += %(d)s/%(j)s*expm1(dt*%(j)s);',
+        (RLA,RLB) = gateTargets[var]
+        out('state_[__ii].%(v)s = %(a)s*%(v)s + %(b)s;',
             v=pretty(var),
-            d=pretty(diffvarUpdate[var]),
-            j=gateJacobians[var],
+            a=pretty(RLA),
+            b=pretty(RLB),
         )
                      
     out.dec(2)
