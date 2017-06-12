@@ -25,11 +25,36 @@
 
 import sys
 import re
-from sympy.printing.ccode import ccode
+import sympy
+from sympy.printing.ccode import CCodePrinter
+from sympy.core import S
+
 
 from parser import MelodeeParser,Differentiator
 import utility
 from utility import order
+
+def repeat(thing, repetitions):
+    return (thing,) * repetitions
+
+class MyCCodeSympyPrinter(CCodePrinter):
+    def __init__(self,*args,**kwargs):
+        CCodePrinter.__init__(self,*args,**kwargs)
+    def _print_Pow(self, expr):
+        PREC = sympy.printing.precedence.precedence(expr)
+        if expr.exp == 0:
+            return 1
+        elif expr.exp == 0.5:
+            return 'sqrt(%s)' % self._print(expr.base)
+        elif expr.exp.is_constant and int(expr.exp) == expr.exp:
+            result = self.parenthesize(expr.base,PREC)
+            if expr.exp > 0:
+                return "*".join(repeat(result, int(expr.exp)))
+            else:
+                return "1.0/"+"/".join(repeat(result, -int(expr.exp)))
+        return 'pow(%s, %s)' % (self._print(expr.base),
+                                self._print(expr.exp))
+
 
 def pretty(symbol):
     return str(symbol)
@@ -40,6 +65,8 @@ class CPrintVisitor:
         self.ssa = ssa
         self.declaredStack = [set(declared)]
         self.decltype = decltype
+        self.cprinter = MyCCodeSympyPrinter()
+                      
     def pushStack(self):
         self.declaredStack.append(set(self.declaredStack[-1]))
     def popStack(self):
@@ -78,7 +105,7 @@ class CPrintVisitor:
         self.out.dec()
         self.out("}")
     def equationPrint(self,lhs,rhs):
-        rhsText = ccode(rhs.sympy)
+        rhsText = self.cprinter.doprint(rhs.sympy, None)
         if pretty(lhs) not in self.declaredStack[-1]:
             self.out("%s %s = %s;",self.decltype,pretty(lhs),rhsText)
             self.declaredStack[-1].add(pretty(lhs))
@@ -90,11 +117,12 @@ class ParamPrintVisitor:
         self.out  = out
         self.other = otherPrintVisitor
         self.params = params
+        self.cprinter = MyCCodeSympyPrinter()
     def ifPrint(self,printer,ifSymbol,thenList,elseList,choiceList):
         self.other.ifPrint(printer,ifSymbol,thenList,elseList,choiceList)
     def equationPrint(self,lhs,rhs):
         self.other.declaredStack[-1].add(pretty(lhs))
-        rhsText = ccode(rhs.sympy)
+        rhsText = self.cprinter.doprint(rhs.sympy, None)
         if lhs in self.params:
             self.out("setDefault(%s, %s);", pretty(lhs),rhsText)
         else:
