@@ -174,6 +174,8 @@ namespace %(target)s
                 const VectorDouble32& Vm,
                 const std::vector<double>& iStim,
                 VectorDouble32& dVm);
+      void updateNonGate(double dt, const VectorDouble32&Vm, VectorDouble32&dVR);
+      void updateGate   (double dt, const VectorDouble32&Vm) ;
       void initializeMembraneVoltage(VectorDouble32& Vm);
       virtual void getCheckpointInfo(std::vector<std::string>& fieldNames,
                                      std::vector<std::string>& fieldUnits) const;
@@ -379,6 +381,138 @@ void ThisReaction::calc(double dt, const VectorDouble32& __Vm,
     out.inc(2)
     for var in order(diffvars-gates):
         out('state_[__ii].%s += dt*%s;',pretty(var),pretty(diffvarUpdate[var]))
+    for var in order(gates):
+        out('state_[__ii].%(v)s += %(d)s/%(j)s*expm1(dt*%(j)s);',
+            v=pretty(var),
+            d=pretty(diffvarUpdate[var]),
+            j=gateJacobians[var],
+        )
+                     
+    out.dec(2)
+    out('''      
+      __dVm[__ii] = Iion;
+   }
+}
+
+void ThisReaction::updateNonGate(double dt, const VectorDouble32& __Vm, VectorDouble32& __dVR)
+{
+   assert(__Vm.size() >= nCells_);
+   for (unsigned __ii=0; __ii<nCells_; ++__ii)
+   {
+      //set Vm
+      const double V = __Vm[__ii];
+
+''', template)
+    out.inc(2)
+    for var in order(diffvars):
+        out('const double %s=state_[__ii].%s;',pretty(var),pretty(var))
+
+    targets = set([diffvarUpdate[var] for var in diffvars-gates])
+    targets.add(Iion)
+
+    cprinter = CPrintVisitor(out, model.ssa, params)
+    model.printTarget(good,targets,cprinter)
+
+    out.dec(2)
+    out(r'''
+
+
+      if (1) 
+      {
+         bool foundError=false;
+#define CHECK_BLOWUP(x) do { if (!isfinite(x)) { fprintf(stderr, "Error in node %%d, variable " #x " = %%g\n", __ii, (x)); foundError=true; } } while(0)
+         CHECK_BLOWUP(Iion);
+            
+         //EDIT_STATE''', template)
+    out.inc(3)
+    for var in order(diffvars-gates):
+        out('CHECK_BLOWUP(%s);',pretty(diffvarUpdate[var]))
+    out.dec(3)
+    out(r'''
+
+#undef CHECK_BLOWUP
+         
+         if (foundError) 
+         {
+#define PRINT_STATE(x) do { fprintf(stderr, "node %%d: " #x " = %%g\n", __ii, (x)); } while(0)
+            //EDIT_STATE''', template)
+    out.inc(4)
+    for var in order(diffvars-gates):
+        out('PRINT_STATE(%s);',pretty(var))
+    out.dec(4)
+    out('''            
+#undef PRINT_STATE
+            
+            exit(255);
+         }
+      }
+      
+      
+      //EDIT_STATE''', template)
+    out.inc(2)
+    for var in order(diffvars-gates):
+        out('state_[__ii].%s += dt*%s;',pretty(var),pretty(diffvarUpdate[var]))
+                     
+    out.dec(2)
+    out('''
+      __dVR[__ii] += Iion;
+   }
+}
+
+void ThisReaction::updateGate(double dt, const VectorDouble32& __Vm)
+{
+   assert(__Vm.size() >= nCells_);
+   for (unsigned __ii=0; __ii<nCells_; ++__ii)
+   {
+      //set Vm
+      const double V = __Vm[__ii];
+''', template)
+    out.inc(2)
+    for var in order(diffvars):
+        out('const double %s=state_[__ii].%s;',pretty(var),pretty(var))
+
+    targets = set([diffvarUpdate[var] for var in gates])
+    targets |= set([gateJacobians[var] for var in gates])
+    
+    cprinter = CPrintVisitor(out, model.ssa, params)
+    model.printTarget(good,targets,cprinter)
+
+    out.dec(2)
+    out(r'''
+
+
+      if (1) 
+      {
+         bool foundError=false;
+#define CHECK_BLOWUP(x) do { if (!isfinite(x)) { fprintf(stderr, "Error in node %%d, variable " #x " = %%g\n", __ii, (x)); foundError=true; } } while(0)
+            
+         //EDIT_STATE''', template)
+    out.inc(3)
+    for var in order(gates):
+        out('CHECK_BLOWUP(%s);',pretty(diffvarUpdate[var]))
+    out.dec(3)
+    out(r'''
+
+#undef CHECK_BLOWUP
+         
+         if (foundError) 
+         {
+#define PRINT_STATE(x) do { fprintf(stderr, "node %%d: " #x " = %%g\n", __ii, (x)); } while(0)
+            //EDIT_STATE''', template)
+    out.inc(4)
+    for var in order(gates):
+        out('PRINT_STATE(%s);',pretty(var))
+    out.dec(4)
+    out('''            
+#undef PRINT_STATE
+            
+            exit(255);
+         }
+      }
+      
+      
+      //EDIT_STATE''', template)
+    out.inc(2)
     for var in order(gates):
         out('state_[__ii].%(v)s += %(d)s/%(j)s*expm1(dt*%(j)s);',
             v=pretty(var),
