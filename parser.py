@@ -60,7 +60,25 @@ class ConsolidatedSystem:
                     newFront |= self.dependencies(var)
             front = newFront
         return depend
-    
+
+    def allExcluding(self,reachable,bad,instructions=None):
+        if instructions == None:
+            instructions = self.instructions
+        reachable = set(reachable)
+        for inst in instructions:
+            if isinstance(inst, IfInstruction):
+                if inst.ifVar not in reachable:
+                    continue
+                reachable |= self.allExcluding(bad,reachable,inst.thenInstructions)
+                reachable |= self.allExcluding(bad,reachable,inst.elseInstructions)
+                reachable |= self.allExcluding(bad,reachable,inst.choiceInstructions)
+            else:
+                if inst in bad:
+                    continue
+                if self.dependencies(inst)<reachable:
+                    reachable.add(inst)
+        return reachable
+
     def printTarget(self, good, target, printVisitor):
         allUpdate = self.allDependencies(good, target)
 

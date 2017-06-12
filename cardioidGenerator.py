@@ -104,12 +104,11 @@ def generateCardioid(model, targetName, headerFile, sourceFile):
     template = {}
     template["target"] = targetName
 
-    params = model.varsWithAttribute("param")
     diffvars = model.diffvars()
-    gates = model.varsWithAttribute("gate") & diffvars
     diffvarUpdate = {var : model.diffvarUpdate(var) for var in diffvars}
-    #gatevars = model.getVars("gate")
-    #tracevars = model.getVars("trace")
+    params = model.varsWithAttribute("param")
+    gates = model.varsWithAttribute("gate") & diffvars
+    polyfits = model.varsWithAttribute("polyfit")
     
     V = model.input("V")
     V_init = model.output("V_init")
@@ -120,7 +119,27 @@ def generateCardioid(model, targetName, headerFile, sourceFile):
     for gate in gates:
         (gateJacobians[gate],dontcare) = differ.diff(diffvarUpdate[gate],gate)
     differ.augmentInstructions()
+
+    computeTargets = set(diffvarUpdate.values()) | set(gateJacobians.values())
+    computeTargets.add(Iion)
+
+    statevars = model.inputs()|diffvars
+    constants = model.allExcluding(set(), statevars)
     
+    computeAllDepend = model.allExcluding(set(), computeTargets)
+    polyfitTargets = {}
+    polyfitCandidates = {}
+    for fit in polyfits:
+        good = set([fit])
+        dependsOnlyOnFit = model.allExcluding(good, statevars-good)
+        polyfitCandidates = (dependsOnlyOnFit & computeAllDepend) - constants
+        polyfitTargets[fit] = set()
+        for var in computeAllDepend-polyfitCandidates:
+            polyfitTargets[fit] |= model.dependencies(var) & polyfitCandidates
+
+    
+
+            
     out = headerFile
     out('''
 #include "Reaction.hh"
@@ -318,10 +337,8 @@ void ThisReaction::calc(double dt, const VectorDouble32& __Vm,
     good |= diffvars
     good.add(V)
 
-    target = set(diffvarUpdate.values()) | set(gateJacobians.values())
-    target.add(Iion)
     cprinter = CPrintVisitor(out, model.ssa, params)
-    model.printTarget(good,target,cprinter)
+    model.printTarget(good,computeTargets,cprinter)
     
     out.dec(2)
     out(r'''
