@@ -170,6 +170,9 @@ def generateCardioid(model, targetName, headerFile, sourceFile):
         RLB = model.addInstruction("_%s_RLB" % gate, M/L*(sympy.exp(dt*L)-1))
         gateTargets[gate] = (RLA,RLB)
 
+    model.extractExpensiveFunctions()
+    model.makeNamesUnique()
+
     computeTargets = set()
     computeTargets.add(Iion)
     computeTargets |= set([diffvarUpdate[var] for var in diffvars-gates])

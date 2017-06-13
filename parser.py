@@ -115,6 +115,11 @@ class ConsolidatedSystem:
 
     def addSymbol(self, name):
         return Symbol(name)
+
+    def addSSA(self, name, sympy):
+        var = self.addSymbol(name)
+        self.ssa[var] = AST(sympy,ASTUnit.null())
+        return var        
     
     def addInstruction(self, name, sympy):
         var = self.addSymbol(name)
@@ -122,6 +127,61 @@ class ConsolidatedSystem:
         self.ssa[var] = AST(sympy,ASTUnit.null())
         return var
 
+    def makeNamesUnique(self):
+        def uniqueNames(instructions, currentNames=set()):
+            for inst in instructions:
+                if isinstance(inst, IfInstruction):
+                    uniqueNames(inst.thenInstructions,set(currentNames))
+                    uniqueNames(inst.elseInstructions,set(currentNames))
+                    uniqueNames(inst.choiceInstructions,currentNames)
+                else:
+                    if inst.name in currentNames:
+                        count=1
+                        base=inst.name
+                        while True:
+                            inst.name = "%s_%03d" % (base, count)
+                            if inst.name not in currentNames:
+                                break
+                            else:
+                                count += 1
+                    currentNames.add(inst.name)
+        uniqueNames(self.instructions)
+
+    def extractExpensiveFunctions(self, instructions=None):
+        topLevel=False
+        if instructions==None:
+            instructions = self.instructions
+            topLevel=True
+        newInstructions = []
+        for inst in instructions:
+            if isinstance(inst, IfInstruction):
+                newThenList = self.extractExpensiveFunctions(inst.thenInstructions)
+                newElseList = self.extractExpensiveFunctions(inst.elseInstructions)
+                newInstructions.append(IfInstruction(inst.ifVar,newThenList,newElseList,inst.choiceInstructions))
+            else:
+                def sympyRecurse(expr, self, top=False):
+                    newVars = []
+                    newArgs = []
+                    for arg in expr.args:
+                        (newVarsFromArg, newArg) = sympyRecurse(arg, self)
+                        newVars += newVarsFromArg
+                        newArgs.append(newArg)
+                    if newVars:
+                        expr = expr.func(*newArgs)
+                    if not top and isinstance(expr.func, sympy.Function):
+                        newSym = self.addSSA("_expensive_functions", expr)
+                        expr = newSym
+                        newVars.append(newSym)
+                    return (newVars, expr)
+                (thisVars, thisExpr) = sympyRecurse(self.ssa[inst].sympy, self, True)
+                newInstructions += thisVars
+                self.ssa[inst].sympy = thisExpr
+                newInstructions.append(inst)
+        if topLevel:
+            self.instructions = newInstructions
+        return newInstructions
+
+        
 class MelodeeParser:
     def __init__(self, *args, **kwargs):
         self._parser = InternalMelodeeParser(*args, **kwargs)
@@ -217,37 +277,7 @@ class Differentiator:
         self.cs.instructions = self._augmentInstructions(self.cs.instructions)
 
 
-# def yyy(model, expr):
-#     if not expr.args:
-#         return expr
-#     newArgs = (yyy(model, arg) for arg in expr.args)
-#     newExpr = expr.func(*newArgs)
-#     if isinstance(expr, sympy.Function):
-#         return model.addInstruction("_expensive_function",newExpr) 
-#     else:
-#         return newExpr
 
-# def extractExpensiveFunctions(model, instructions=None):
-#     topLevel=False
-#     if instructions==None:
-#         instructions = model.instructions
-#         topLevel=True
-#         newInstructions = []
-#     for inst in instructions:
-#         if isinstance(inst, IfInstruction):
-#             newThenList = extractExpensiveFunctions(model,inst.thenInstructions)
-#             newElseList = extractExpensiveFunctions(model,inst.elseInstructions)
-#             newInstructions.append(IfInstruction(inst.ifVar,newThenList,newElseList,inst.choiceInstructions))
-#         else:
-#             def sympyRecurse(expr, newInstructions=newInstructions):
-#                 expr
-                
-#             newInstructions.append(inst)
-#     if topLevel:
-#         model.instructions = newInstructions
-#     return newInstructions
-
-        
 #############################################################################
 
 class XXXSyntaxError(SyntaxError):
@@ -796,17 +826,9 @@ def consolidateSystem(timeUnit, rootEncap, connections):
                     lb=len(nameArray)-1
                     while lb >= 0 and "_".join(nameArray[lb:]) in currentNames:
                         lb += -1
-                    if lb > -1:
-                        name = "_".join(nameArray[lb:])
-                    else:
-                        count = 1
-                        base = "_".join(nameArray)
-                        while True:
-                            name = base + "_" + str(count)
-                            if name not in currentNames:
-                                break
-                            else:
-                                count += 1
+                    if lb == -1:
+                        lb = 0
+                    name = "_".join(nameArray[lb:])
                     nameMap[inst] = name
                     currentNames.add(name)
             return nameMap
@@ -815,12 +837,9 @@ def consolidateSystem(timeUnit, rootEncap, connections):
         for (var,name) in nameMap.items():
             var.name = name
 
-
+        self.makeNamesUnique()
         return self
-            
-        
 
-                            
 class Subsystem:
     def __init__(self):
         self.ssa = SSA()
