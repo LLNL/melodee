@@ -1874,6 +1874,7 @@ class InternalMelodeeParser:
         ii=0
         for name in p[3]:
             self.enumerations[name] = textToAST(str(ii), ASTUnit(unit, False))
+            ii += 1
         p[0] = unit
     def p_unitExpr_1(self, p):
         '''unitExpr : ONE'''
