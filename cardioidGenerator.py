@@ -149,7 +149,8 @@ class InterpolatePrintVisitor:
         self.other.ifPrint(printer,ifSymbol,thenList,elseList,choiceList)
     def equationPrint(self,lhs,rhs):
         if lhs in self.interps:
-            rhsText = "interpolate(%s)" % pretty(self.interps[lhs])
+            (interpVar, count) = self.interps[lhs]
+            rhsText = "_interpolant[%d].eval(%s)" % (count, pretty(interpVar))
             self.other.equationPrintWithRhs(lhs,rhsText)
         else:
             self.other.equationPrint(lhs,rhs)
@@ -220,7 +221,14 @@ def generateCardioid(model, targetName, headerFile, sourceFile):
             )
         polyfitTargets[fit] = externallyUsedFits
         allfits |= externallyUsedFits
-        
+
+    fitCount = 0
+    interps = {}
+    for fit in order(polyfits):
+        for target in order(polyfitTargets[fit]):
+            interps[target] = (fit, fitCount)
+            fitCount += 1
+
     computeAllDepend = model.allDependencies(
         approxvars|statevars|allfits,
         computeTargets)
@@ -287,9 +295,8 @@ namespace %(target)s
       std::vector<State> state_;
       double __cachedDt;''', template)
     out.inc(2)
-    for fit in polyfits:
-        for var in order(polyfitTargets[fit]):
-            out("Interpolant _interp_%s;", pretty(var))
+    if fitCount>0:
+        out("Interpolation _interpolant[%d];" % fitCount)
     out.dec(2)
     out('''
 
@@ -444,10 +451,7 @@ void ThisReaction::calc(double _dt, const VectorDouble32& __Vm,
         out('const double %s=state_[__ii].%s;',pretty(var),pretty(var))
     good |= diffvars
     good.add(V)
-    interps = {}
-    for fit in polyfits:
-        for target in polyfitTargets[fit]:
-            interps[target] = fit
+
     iprinter = InterpolatePrintVisitor(cprinter, interps)
     model.printSet(model.allDependencies(good|allfits,computeTargets)-good, iprinter)
     
