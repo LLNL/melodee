@@ -721,15 +721,19 @@ def consolidateSystem(timeUnit, rootEncap, connections):
         # fix time
         self.time = timeSym
 
-        #get the diffvars and params
+        #get the diffvars
         for (encap,tupName) in nameFromEncap.items():
             subsystem = encap.subsystem
+            appendAfter = {}
             for name in subsystem.diffvars:
                 oldSym = subsystem.getVar(name)
                 newSym = symbolMap.get(encap,oldSym,tupName)
-                convertedInstructions.append(newSym)
+
                 diffUnit = subsystem.getUnit(name)
-                self.ssa[newSym] = AST(symbolMap.get(encap,subsystem.getVar(name+".init"),tupName),ASTUnit(diffUnit,False))
+                initSym = symbolMap.get(encap,subsystem.getVar(name+".init"),tupName)
+                self.ssa[newSym] = AST(initSym,ASTUnit(diffUnit,False))
+                appendAfter[initSym] = newSym
+
                 updateUnit = subsystem.getUnit(name+".diff")
                 updateSym = symbolMap.get(encap,subsystem.getVar(name+".diff"),tupName)
                 if timeUnit == None:
@@ -739,18 +743,11 @@ def consolidateSystem(timeUnit, rootEncap, connections):
                 else:
                     newName = fullName(tupName + (name+".diff_convertUnit",))
                     newDiff = Symbol(newName)
-                    convertedInstructions.append(newDiff)
+                    appendAfter[updateSym] = newDiff
                     self.ssa[newDiff] = AST(sympy.Mul(updateSym,updateUnit.convertTo(diffUnit/timeUnit)),
                                            ASTUnit(diffUnit/timeUnit,False));
                     diffvarUpdate = newDiff
                 self._diffvars[newSym] = diffvarUpdate
-            for (name,thisAttrMap) in subsystem.attributeMap.items():
-                oldSym = subsystem.getVar(name)
-                for (attr,info) in thisAttrMap.items():
-                    self.make_a(attr, symbolMap.get(encap,oldSym,tupName), info)
-        
-        #list all the instructions.
-        for (encap, tupName) in nameFromEncap.items():
             def convert(inst, symbolMap=symbolMap, encap=encap, tupName=tupName):
                 if isinstance(inst,IfInstruction):
                     return IfInstruction(
@@ -762,7 +759,17 @@ def consolidateSystem(timeUnit, rootEncap, connections):
                 else:
                     return symbolMap.get(encap,inst,tupName)
             for inst in encap.instructions():
-                convertedInstructions.append(convert(inst))
+                converted = convert(inst)
+                convertedInstructions.append(converted)
+                if converted in appendAfter:
+                    convertedInstructions.append(appendAfter[converted])
+
+        for (encap,tupName) in nameFromEncap.items():
+            subsystem = encap.subsystem
+            for (name,thisAttrMap) in subsystem.attributeMap.items():
+                oldSym = subsystem.getVar(name)
+                for (attr,info) in thisAttrMap.items():
+                    self.make_a(attr, symbolMap.get(encap,oldSym,tupName), info)
 
         #order the converted instructions
         def symsFromInstructionGenerator(root):
@@ -792,9 +799,10 @@ def consolidateSystem(timeUnit, rootEncap, connections):
         definedSymbols |= set(self._inputs.values())
 
         while undefinedInstructions:
-            removeThisIter = set()
-            newlyDefinedSyms = set()
-            for inst in undefinedInstructions:
+            removedThisIter = False
+            for inst in convertedInstructions:
+                if inst not in undefinedInstructions:
+                    continue
                 syms = symsFromInstruction[inst]
                 depend = dependFromInstruction[inst]
                 #print "===",inst
@@ -802,18 +810,16 @@ def consolidateSystem(timeUnit, rootEncap, connections):
                 #print "+++",depend
                 if depend <= definedSymbols:
                     #print "DEFINING", syms
-                    removeThisIter.add(inst)
-                    newlyDefinedSyms |= syms
-            if not removeThisIter:
+                    removedThisIter = True
+                    undefinedInstructions.remove(inst)
+                    definedSymbols |= syms
+                    self.instructions.append(inst)
+
+            if not removedThisIter:
                 print undefinedInstructions
                 print len(undefinedInstructions)
                 print definedSymbols
                 assert(removeThisIter)
-            #FIXME, need order() here for reproducable results
-            for inst in removeThisIter:
-                self.instructions.append(inst)
-            undefinedInstructions -= removeThisIter
-            definedSymbols |= newlyDefinedSyms
             #print "---------------------------------------------------------------"
 
         #now we need to fix variable names.  ideally, we'd like to
