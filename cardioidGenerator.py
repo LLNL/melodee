@@ -117,6 +117,8 @@ class CPrintVisitor:
         self.out("}")
     def equationPrint(self,lhs,rhs):
         rhsText = self.cprinter.doprint(rhs.sympy, None)
+        self.equationPrintWithRhs(lhs,rhsText)
+    def equationPrintWithRhs(self,lhs,rhsText):
         if pretty(lhs) not in self.declaredStack[-1]:
             self.out("%s %s = %s;",self.decltype,pretty(lhs),rhsText)
             self.declaredStack[-1].add(pretty(lhs))
@@ -136,6 +138,19 @@ class ParamPrintVisitor:
         rhsText = self.cprinter.doprint(rhs.sympy, None)
         if lhs in self.params:
             self.out("setDefault(%s, %s);", pretty(lhs),rhsText)
+        else:
+            self.other.equationPrint(lhs,rhs)
+
+class InterpolatePrintVisitor:
+    def __init__(self, otherPrintVisitor, interps):
+        self.other = otherPrintVisitor
+        self.interps = interps
+    def ifPrint(self,printer,ifSymbol,thenList,elseList,choiceList):
+        self.other.ifPrint(printer,ifSymbol,thenList,elseList,choiceList)
+    def equationPrint(self,lhs,rhs):
+        if lhs in self.interps:
+            rhsText = "interpolate(%s)" % pretty(self.interps[lhs])
+            self.other.equationPrintWithRhs(lhs,rhsText)
         else:
             self.other.equationPrint(lhs,rhs)
 
@@ -188,6 +203,7 @@ def generateCardioid(model, targetName, headerFile, sourceFile):
     constants = model.allExcluding(approxvars, statevars) & computeAllDepend
 
     polyfitTargets = {}
+    allfits = set()
     for fit in polyfits:
         good = approxvars | set([fit])
         dependsOnlyOnFit = model.allExcluding(good, statevars-good)
@@ -203,7 +219,8 @@ def generateCardioid(model, targetName, headerFile, sourceFile):
             polyfitCandidates
             )
         polyfitTargets[fit] = externallyUsedFits
-
+        allfits |= externallyUsedFits
+        
             
     out = headerFile
     out('''
@@ -423,13 +440,12 @@ void ThisReaction::calc(double _dt, const VectorDouble32& __Vm,
         out('const double %s=state_[__ii].%s;',pretty(var),pretty(var))
     good |= diffvars
     good.add(V)
-
+    interps = {}
     for fit in polyfits:
-        for var in polyfitTargets[fit]:
-            good.add(var)
-
-
-    model.printTarget(good,computeTargets,cprinter)
+        for target in polyfitTargets[fit]:
+            interps[target] = fit
+    iprinter = InterpolatePrintVisitor(cprinter, interps)
+    model.printSet(model.allDependencies(good|allfits,computeTargets)-good, iprinter)
     
     out.dec(2)
     out(r'''
