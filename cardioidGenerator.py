@@ -240,8 +240,8 @@ namespace %(target)s
                 const VectorDouble32& Vm,
                 const std::vector<double>& iStim,
                 VectorDouble32& dVm);
-      void updateNonGate(double dt, const VectorDouble32&Vm, VectorDouble32&dVR);
-      void updateGate   (double dt, const VectorDouble32&Vm) ;
+      //void updateNonGate(double dt, const VectorDouble32&Vm, VectorDouble32&dVR);
+      //void updateGate   (double dt, const VectorDouble32&Vm) ;
       void initializeMembraneVoltage(VectorDouble32& Vm);
       virtual void getCheckpointInfo(std::vector<std::string>& fieldNames,
                                      std::vector<std::string>& fieldUnits) const;
@@ -439,77 +439,6 @@ void ThisReaction::calc(double _dt, const VectorDouble32& __Vm,
     out.dec(2)
     out('''      
       __dVm[__ii] = Iion;
-   }
-}
-
-void ThisReaction::updateNonGate(double _dt, const VectorDouble32& __Vm, VectorDouble32& __dVR)
-{
-   assert(__Vm.size() >= nCells_);
-   for (unsigned __ii=0; __ii<nCells_; ++__ii)
-   {
-      //set Vm
-      const double V = __Vm[__ii];
-
-''', template)
-    out.inc(2)
-    for var in order(diffvars):
-        out('const double %s=state_[__ii].%s;',pretty(var),pretty(var))
-
-    targets = set([diffvarUpdate[var] for var in diffvars-gates])
-    targets.add(Iion)
-
-    cprinter = CPrintVisitor(out, model.ssa, params)
-    model.printTarget(good,targets,cprinter)
-
-    out.dec(2)
-    out(r'''
-
-      
-      
-      //EDIT_STATE''', template)
-    out.inc(2)
-    for var in order(diffvars-gates):
-        out('state_[__ii].%s += _dt*%s;',pretty(var),pretty(diffvarUpdate[var]))
-                     
-    out.dec(2)
-    out('''
-      __dVR[__ii] += Iion;
-   }
-}
-
-void ThisReaction::updateGate(double _dt, const VectorDouble32& __Vm)
-{
-   assert(__Vm.size() >= nCells_);
-   for (unsigned __ii=0; __ii<nCells_; ++__ii)
-   {
-      //set Vm
-      const double V = __Vm[__ii];
-''', template)
-    out.inc(2)
-    for var in order(diffvars):
-        out('const double %s=state_[__ii].%s;',pretty(var),pretty(var))
-
-    targets = set([diffvarUpdate[var] for var in gates])
-    targets |= set([gateTargets[var] for var in gates])
-    
-    cprinter = CPrintVisitor(out, model.ssa, params)
-    model.printTarget(good,targets,cprinter)
-
-    out.dec(2)
-    out(r'''
-      
-      //EDIT_STATE''', template)
-    out.inc(2)
-    for var in order(gates):
-        (RLA,RLB) = gateTargets[var]
-        out('state_[__ii].%(v)s = %(a)s*%(v)s + %(b)s;',
-            v=pretty(var),
-            a=pretty(RLA),
-            b=pretty(RLB),
-        )
-                     
-    out.dec(2)
-    out('''      
    }
 }
 
