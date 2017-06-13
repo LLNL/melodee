@@ -417,38 +417,6 @@ void ThisReaction::calc(double _dt, const VectorDouble32& __Vm,
     
     out.dec(2)
     out(r'''
-
-
-      if (1) 
-      {
-         bool foundError=false;
-#define CHECK_BLOWUP(x) do { if (!isfinite(x)) { fprintf(stderr, "Error in node %%d, variable " #x " = %%g\n", __ii, (x)); foundError=true; } } while(0)
-         CHECK_BLOWUP(Iion);
-            
-         //EDIT_STATE''', template)
-    out.inc(3)
-    for var in order(diffvars):
-        out('CHECK_BLOWUP(%s);',pretty(diffvarUpdate[var]))
-    out.dec(3)
-    out(r'''
-
-#undef CHECK_BLOWUP
-         
-         if (foundError) 
-         {
-#define PRINT_STATE(x) do { fprintf(stderr, "node %%d: " #x " = %%g\n", __ii, (x)); } while(0)
-            //EDIT_STATE''', template)
-    out.inc(4)
-    for var in order(diffvars):
-        out('PRINT_STATE(%s);',pretty(var))
-    out.dec(4)
-    out('''            
-#undef PRINT_STATE
-            
-            exit(255);
-         }
-      }
-      
       
       //EDIT_STATE''', template)
     out.inc(2)
@@ -490,36 +458,6 @@ void ThisReaction::updateNonGate(double _dt, const VectorDouble32& __Vm, VectorD
     out.dec(2)
     out(r'''
 
-
-      if (1) 
-      {
-         bool foundError=false;
-#define CHECK_BLOWUP(x) do { if (!isfinite(x)) { fprintf(stderr, "Error in node %%d, variable " #x " = %%g\n", __ii, (x)); foundError=true; } } while(0)
-         CHECK_BLOWUP(Iion);
-            
-         //EDIT_STATE''', template)
-    out.inc(3)
-    for var in order(diffvars-gates):
-        out('CHECK_BLOWUP(%s);',pretty(diffvarUpdate[var]))
-    out.dec(3)
-    out(r'''
-
-#undef CHECK_BLOWUP
-         
-         if (foundError) 
-         {
-#define PRINT_STATE(x) do { fprintf(stderr, "node %%d: " #x " = %%g\n", __ii, (x)); } while(0)
-            //EDIT_STATE''', template)
-    out.inc(4)
-    for var in order(diffvars-gates):
-        out('PRINT_STATE(%s);',pretty(var))
-    out.dec(4)
-    out('''            
-#undef PRINT_STATE
-            
-            exit(255);
-         }
-      }
       
       
       //EDIT_STATE''', template)
@@ -553,37 +491,6 @@ void ThisReaction::updateGate(double _dt, const VectorDouble32& __Vm)
 
     out.dec(2)
     out(r'''
-
-
-      if (1) 
-      {
-         bool foundError=false;
-#define CHECK_BLOWUP(x) do { if (!isfinite(x)) { fprintf(stderr, "Error in node %%d, variable " #x " = %%g\n", __ii, (x)); foundError=true; } } while(0)
-            
-         //EDIT_STATE''', template)
-    out.inc(3)
-    for var in order(gates):
-        out('CHECK_BLOWUP(%s);',pretty(diffvarUpdate[var]))
-    out.dec(3)
-    out(r'''
-
-#undef CHECK_BLOWUP
-         
-         if (foundError) 
-         {
-#define PRINT_STATE(x) do { fprintf(stderr, "node %%d: " #x " = %%g\n", __ii, (x)); } while(0)
-            //EDIT_STATE''', template)
-    out.inc(4)
-    for var in order(gates):
-        out('PRINT_STATE(%s);',pretty(var))
-    out.dec(4)
-    out('''            
-#undef PRINT_STATE
-            
-            exit(255);
-         }
-      }
-      
       
       //EDIT_STATE''', template)
     out.inc(2)
