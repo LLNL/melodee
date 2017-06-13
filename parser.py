@@ -55,8 +55,8 @@ class ConsolidatedSystem:
         while front:
             newFront = set()
             for var in front:
+                depend.add(var)
                 if var not in good:
-                    depend.add(var)
                     newFront |= self.dependencies(var)
             front = newFront
         return depend
@@ -157,22 +157,23 @@ class ConsolidatedSystem:
     
     def _extractExpensiveFunctions(self, instructions):
         newInstructions = []
-        expensiveInstructions = []
+        expensiveInstructions = set()
         for inst in instructions:
             if isinstance(inst, IfInstruction):
                 newThenList, thenExpense = self._extractExpensiveFunctions(inst.thenInstructions)
                 newElseList, elseExpense = self._extractExpensiveFunctions(inst.elseInstructions)
                 newInstructions.append(IfInstruction(inst.ifVar,newThenList,newElseList,inst.choiceInstructions))
-                expensiveInstructions += thenExpense
-                expensiveInstructions += elseExpense
+                expensiveInstructions |= thenExpense
+                expensiveInstructions |= elseExpense
             else:
                 (thisVars, thisExpr, isExpensive) = self._extractFunctionsFromSympy(
                     self.ssa[inst].sympy, True)
                 self.ssa[inst].sympy = thisExpr
                 newInstructions += thisVars
                 newInstructions.append(inst)
+                expensiveInstructions |= set(thisVars)
                 if isExpensive:
-                    expensiveInstructions.append(inst)
+                    expensiveInstructions.add(inst)
         return (newInstructions, expensiveInstructions)
 
     def _extractFunctionsFromSympy(self, expr, top=False):

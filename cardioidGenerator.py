@@ -181,22 +181,28 @@ def generateCardioid(model, targetName, headerFile, sourceFile):
         computeTargets.add(RLA)
         computeTargets.add(RLB)
 
-    computeAllDepend = model.allDependencies(set([dt,V])|diffvars, computeTargets)
-
+    approxvars = set([dt])
     statevars = model.inputs()|diffvars
-    constants = model.allExcluding(set([dt]), statevars) & computeAllDepend
+    computeAllDepend = model.allDependencies(approxvars|statevars, computeTargets)
+
+    constants = model.allExcluding(approxvars, statevars) & computeAllDepend
 
     polyfitTargets = {}
     for fit in polyfits:
-        good = set([fit,dt])
+        good = approxvars | set([fit])
         dependsOnlyOnFit = model.allExcluding(good, statevars-good)
         polyfitCandidates = (dependsOnlyOnFit & computeAllDepend) - constants
-        polyfitTargets[fit] = set()
-        polyfitTargets[fit] |= computeTargets & polyfitCandidates
-        for var in computeAllDepend-polyfitCandidates:
-            polyfitTargets[fit] |= model.dependencies(var) & polyfitCandidates
 
-    
+        expensiveFit = expensiveVars & polyfitCandidates
+        inexpensiveFit = model.allExcluding(good, (statevars-good)|expensiveFit)
+        polyfitCandidates -= inexpensiveFit
+        
+        externallyUsedFits = (
+            model.allDependencies(approxvars|statevars|polyfitCandidates, computeTargets)
+            &
+            polyfitCandidates
+            )
+        polyfitTargets[fit] = externallyUsedFits
 
             
     out = headerFile
