@@ -401,6 +401,16 @@ void assertStateOrderAndVarNamesAgree(void)
 void ThisReaction::calc(double _dt, const VectorDouble32& __Vm,
                        const vector<double>& __iStim , VectorDouble32& __dVm)
 {
+   //define the constants''', template)
+    out.inc()
+
+    cprinter = CPrintVisitor(out, model.ssa, params)
+    model.printTarget(good,computeAllDepend&constants,cprinter)
+
+    good |= constants
+    
+    out.dec()
+    out('''
    for (unsigned __ii=0; __ii<nCells_; ++__ii)
    {
       //set Vm
@@ -418,7 +428,7 @@ void ThisReaction::calc(double _dt, const VectorDouble32& __Vm,
         for var in polyfitTargets[fit]:
             good.add(var)
 
-    cprinter = CPrintVisitor(out, model.ssa, params)
+
     model.printTarget(good,computeTargets,cprinter)
     
     out.dec(2)
