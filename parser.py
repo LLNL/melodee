@@ -171,7 +171,12 @@ class ConsolidatedSystem:
                         newArgs.append(newArg)
                     if newVars:
                         expr = expr.func(*newArgs)
-                    if not top and isinstance(expr.func, sympy.Function):
+                    if not top and (
+                        isinstance(expr.func, type(sympy.Function))
+                        or (
+                            expr.func == sympy.Pow and (
+                                not expr.exp.is_constant or
+                                int(expr.exp) != expr.exp))):
                         newSym = self.addSSA("_expensive_functions", expr)
                         expr = newSym
                         newVars.append(newSym)
