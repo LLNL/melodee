@@ -78,10 +78,13 @@ class ConsolidatedSystem:
                     self.dependencies(inst)<=reachable):
                     reachable.add(inst)
         return reachable-origReachable
-
+    
+    
     def printTarget(self, good, target, printVisitor):
-        allUpdate = self.allDependencies(good, target)
-
+        allUpdate = self.allDependencies(good, target)-good
+        self.printSet(allUpdate, printVisitor)
+        
+    def printSet(self, allUpdate, printVisitor):
         def printer(instructions, allUpdate=allUpdate, printVisitor=printVisitor):
             for inst in instructions:
                 if isinstance(inst, IfInstruction) and inst.ifVar in allUpdate:
