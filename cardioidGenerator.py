@@ -221,7 +221,11 @@ def generateCardioid(model, targetName, headerFile, sourceFile):
         polyfitTargets[fit] = externallyUsedFits
         allfits |= externallyUsedFits
         
-            
+    computeAllDepend = model.allDependencies(
+        approxvars|statevars|allfits,
+        computeTargets)
+    constants = model.allExcluding(approxvars,statevars) & computeAllDepend
+
     out = headerFile
     out('''
 #include "Reaction.hh"
