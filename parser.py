@@ -87,7 +87,7 @@ class ConsolidatedSystem:
     def printSet(self, allUpdate, printVisitor):
         def printer(instructions, allUpdate=allUpdate, printVisitor=printVisitor):
             for inst in instructions:
-                if isinstance(inst, IfInstruction) and inst.ifVar in allUpdate:
+                if isinstance(inst, IfInstruction) and instructionsInList([inst]) & allUpdate:
                     printVisitor.ifPrint(printer, inst.ifVar, inst.thenInstructions, inst.elseInstructions, inst.choiceInstructions)
                 else:
                     if inst in allUpdate:
@@ -330,7 +330,8 @@ class SSA(dict):
             for sym in symbolMaybeList:
                 ret |= self[sym].dependencies()
             return ret
-            
+
+
 class IfInstruction:
     def __init__(self, ifVar, thenInstructions, elseInstructions, choiceInstructions):
         self.ifVar = ifVar
@@ -338,6 +339,17 @@ class IfInstruction:
         self.elseInstructions = elseInstructions
         self.choiceInstructions = choiceInstructions
 
+def instructionsInList(instructions):
+    retval = set()
+    for inst in instructions:
+        if isinstance(inst, IfInstruction):
+            retval |= instructionsInList(inst.thenInstructions)
+            retval |= instructionsInList(inst.elseInstructions)
+            retval |= instructionsInList(inst.choiceInstructions)
+        else:
+            retval.add(inst)
+    return retval
+        
 class Choice:
     def __init__(self, ifVar, thenVar, elseVar, unit):
         self.ifVar = ifVar
