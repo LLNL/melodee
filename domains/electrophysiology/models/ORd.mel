@@ -38,7 +38,7 @@ subsystem ORd {
    diffvar nass {mM};
    diffvar ki {mM};
    diffvar kss {mM};
-   diffvar cai {mM};
+   diffvar @interp(1e-5,1e-5,1e-3) cai {mM};
    diffvar cass {mM};
    diffvar cansr {mM};
    diffvar cajsr {mM};
@@ -214,7 +214,8 @@ subsystem ORd {
    fItop=(1.0/(1.0+KmCaMK/CaMKa));
    Ito=Gto*(v-EK)*((1.0-fItop)*a*i+fItop*ap*ip);
 
-   diffvar @gate d ff fs fcaf fcas jca nca ffp fcafp {1};
+   diffvar @gate d ff fs fcaf fcas nca ffp fcafp {1};
+   diffvar @interp(0,1,1e-4) @gate jca {1};
    d.init=0;
    ff.init=1;
    fs.init=1;
