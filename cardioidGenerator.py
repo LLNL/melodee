@@ -170,7 +170,7 @@ def generateCardioid(model, targetName, headerFile, sourceFile):
         RLB = model.addInstruction("_%s_RLB" % gate, M/L*(sympy.exp(dt*L)-1))
         gateTargets[gate] = (RLA,RLB)
 
-    model.extractExpensiveFunctions()
+    expensiveVars = model.extractExpensiveFunctions()
     model.makeNamesUnique()
 
     computeTargets = set()

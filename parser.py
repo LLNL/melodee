@@ -150,45 +150,53 @@ class ConsolidatedSystem:
                     currentNames.add(inst.name)
         uniqueNames(self.instructions)
 
-    def extractExpensiveFunctions(self, instructions=None):
-        topLevel=False
-        if instructions==None:
-            instructions = self.instructions
-            topLevel=True
+    def extractExpensiveFunctions(self):
+        (newInstructions,retval) = self._extractExpensiveFunctions(self.instructions)
+        self.instructions = newInstructions
+        return retval
+    
+    def _extractExpensiveFunctions(self, instructions):
         newInstructions = []
+        expensiveInstructions = []
         for inst in instructions:
             if isinstance(inst, IfInstruction):
-                newThenList = self.extractExpensiveFunctions(inst.thenInstructions)
-                newElseList = self.extractExpensiveFunctions(inst.elseInstructions)
+                newThenList, thenExpense = self._extractExpensiveFunctions(inst.thenInstructions)
+                newElseList, elseExpense = self._extractExpensiveFunctions(inst.elseInstructions)
                 newInstructions.append(IfInstruction(inst.ifVar,newThenList,newElseList,inst.choiceInstructions))
+                expensiveInstructions += thenExpense
+                expensiveInstructions += elseExpense
             else:
-                def sympyRecurse(expr, self, top=False):
-                    newVars = []
-                    newArgs = []
-                    for arg in expr.args:
-                        (newVarsFromArg, newArg) = sympyRecurse(arg, self)
-                        newVars += newVarsFromArg
-                        newArgs.append(newArg)
-                    if newVars:
-                        expr = expr.func(*newArgs)
-                    if not top and (
-                        isinstance(expr.func, type(sympy.Function))
-                        or (
-                            expr.func == sympy.Pow and (
-                                not expr.exp.is_constant or
-                                int(expr.exp) != expr.exp))):
-                        newSym = self.addSSA("_expensive_functions", expr)
-                        expr = newSym
-                        newVars.append(newSym)
-                    return (newVars, expr)
-                (thisVars, thisExpr) = sympyRecurse(self.ssa[inst].sympy, self, True)
-                newInstructions += thisVars
+                (thisVars, thisExpr, isExpensive) = self._extractFunctionsFromSympy(
+                    self.ssa[inst].sympy, True)
                 self.ssa[inst].sympy = thisExpr
+                newInstructions += thisVars
                 newInstructions.append(inst)
-        if topLevel:
-            self.instructions = newInstructions
-        return newInstructions
+                if isExpensive:
+                    expensiveInstructions.append(inst)
+        return (newInstructions, expensiveInstructions)
 
+    def _extractFunctionsFromSympy(self, expr, top=False):
+        newVars = []
+        newArgs = []
+        isExpensive = False
+        for arg in expr.args:
+            (newVarsFromArg, newArg,dontcare) = self._extractFunctionsFromSympy(arg)
+            newVars += newVarsFromArg
+            newArgs.append(newArg)
+        if newVars:
+            expr = expr.func(*newArgs)
+        if isinstance(expr.func, type(sympy.Function)) or (
+                expr.func == sympy.Pow and (
+                    not expr.exp.is_constant or
+                    int(expr.exp) != expr.exp)):
+            if top:
+                isExpensive = True
+            else:
+                newSym = self.addSSA("_expensive_functions", expr)
+                expr = newSym
+                newVars.append(newSym)
+        return (newVars, expr, isExpensive)
+        
         
 class MelodeeParser:
     def __init__(self, *args, **kwargs):
