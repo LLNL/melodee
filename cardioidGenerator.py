@@ -54,6 +54,17 @@ class MyCCodeSympyPrinter(CCodePrinter):
                 return "1.0/"+"/".join(repeat(result, -int(expr.exp)))
         return 'pow(%s, %s)' % (self._print(expr.base),
                                 self._print(expr.exp))
+    def _print_Relational(self,expr):
+        if expr.rel_op == "==" or expr.rel_op == "!=":
+            PREC = sympy.printing.precedence.precedence(expr)
+            return "%s %s %s" % (self.parenthesize(expr.lhs, PREC),
+                                 expr.rel_op,
+                                 self.parenthesize(expr.rhs, PREC))
+        else:
+            return super(MyCCodeSympyPrinter, self)._print_Relational(expr)
+                                 
+        PREC = sympy.printing.precedence.precedence(expr)
+        return self.parenthesize("==".join([self._print(arg) for arg in expr.args]),PREC)
 
 
 def pretty(symbol):
@@ -284,9 +295,6 @@ namespace scanReaction
 #include <cassert>
 
 using namespace std;
-
-#define Eq(x,y) ((x)==(y))
-
 
 namespace scanReaction 
 {
