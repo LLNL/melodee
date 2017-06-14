@@ -38,7 +38,7 @@ subsystem ORd {
    diffvar nass {mM};
    diffvar ki {mM};
    diffvar kss {mM};
-   diffvar @interp(1e-5,1e-5,1e-3) cai {mM};
+   diffvar @interp(1e-5,1e-2,1e-5) cai {mM};
    diffvar cass {mM};
    diffvar cansr {mM};
    diffvar cajsr {mM};

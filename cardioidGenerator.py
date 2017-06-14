@@ -426,6 +426,43 @@ void assertStateOrderAndVarNamesAgree(void)
    __cachedDt = __dt;
 }
 
+void ThisReaction::createInterpolants(const double _dt) {
+''', template)
+
+    out.inc()
+    for target in order(interps.keys()):
+        fit,fitCount = interps[target]
+        (lb,ub,inc) = model.info("interp",fit).split(",")
+        lookup = {
+            "target" : pretty(target),
+            "ub" : ub,
+            "lb" : lb,
+            "inc" : inc,
+            "fit" : pretty(fit),
+            "fitCount" : fitCount,
+        }
+        out("{")
+        out.inc()
+        out("int _numPoints = (%(ub)s - %(lb)s)/%(inc)s;", lookup)
+        out("vector<double> _inputs(_numPoints);")
+        out("vector<double> _outputs(_numPoints);")
+        out("for (int _ii=0; _ii<_numPoints; _ii++)", lookup)
+        out("{")
+        out.inc()
+        out("double %(fit)s = %(lb)s + (%(ub)s - %(lb)s)*(_ii+0.5)/_numPoints;", lookup)
+        out("_inputs[_ii] = %(fit)s;", lookup)
+        cprinter = CPrintVisitor(out, model.ssa, params)
+        model.printTarget(good|set([fit]),set([target]),cprinter)
+        out("_outputs[_ii] = %(target)s;", lookup)
+        out.dec()
+        out("}")
+        out("_interpolant[%(fitCount)s] = makeInterpolant(_inputs,_outputs);",lookup)
+        out.dec()
+        out("}")
+    out.dec()
+    out('''
+}
+
 void ThisReaction::calc(double _dt, const VectorDouble32& __Vm,
                        const vector<double>& __iStim , VectorDouble32& __dVm)
 {
