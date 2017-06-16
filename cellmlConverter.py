@@ -151,7 +151,7 @@ def parseRhs(rhsElement):
                     
                     
     if rhsElement.tag == "ci":
-        return (rhsElement.text.strip(), set([rhsElement.text]))
+        return (rhsElement.text.strip(), set([rhsElement.text.strip()]))
     elif rhsElement.tag == "cn":
         text = rhsElement.text.strip()
         sep = rhsElement.find("sep")
@@ -183,6 +183,12 @@ def parseRhs(rhsElement):
                 pass
             return ("log("+arg+")/log("+base+")", baseDepend|argDepend)
 
+        if op == "diff":
+            assert(rhsElement.find("diff") != None)
+            assert(rhsElement.find("bvar/ci").text.strip() == "time")
+            assert(rhsElement.find("ci") != None)
+            var = rhsElement.find("ci").text.strip()+".diff"
+            return (var, set([var]))
         (texts, dependencies) = unzip([parseRhs(item) for item in rhsElement[1:]])
         allDependencies = set()
         for depend in dependencies:
@@ -213,6 +219,7 @@ def parseRhs(rhsElement):
             return (functionOps[op]+"("+",".join(texts)+")",
                     allDependencies)
         else:
+            print rhsElement
             print op
             assert(False)
     elif rhsElement.tag == "piecewise":
@@ -366,6 +373,8 @@ class Component:
                 if eqn.dependencies <= good: 
                     newFront.add(var)
                     eqn.toCode(out)
+                    if eqn.isDiff:
+                        newFront.add(var+".diff")
             if not newFront:
                 break
             else:
