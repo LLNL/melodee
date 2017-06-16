@@ -85,7 +85,7 @@ def parseEquation(eqnElement, varToUnit):
     else:
         assert(lhsElement.tag == "apply")
         assert(lhsElement.find("diff") != None)
-        assert(lhsElement.find("bvar/ci").text.strip() == "time")
+        assert(lhsElement.find("bvar/ci") != None)
         assert(lhsElement.find("ci") != None)
         lhs = lhsElement.find("ci").text.strip()
         isDiff=1
@@ -185,7 +185,7 @@ def parseRhs(rhsElement):
 
         if op == "diff":
             assert(rhsElement.find("diff") != None)
-            assert(rhsElement.find("bvar/ci").text.strip() == "time")
+            assert(rhsElement.find("bvar/ci") != None)
             assert(rhsElement.find("ci") != None)
             var = rhsElement.find("ci").text.strip()+".diff"
             return (var, set([var]))
@@ -289,7 +289,11 @@ class Component:
             if var in self.eqns:
                 diffeqns[var].addInitialCondition(self.eqns[var])
                 self.eqns[var] = diffeqns[var]
-        
+            else:
+                diffeqns[var].addInitialCondition(
+                    Equation(var, "NO INITIAL CONDITION", self.varToUnit[var], set(), False))
+                self.eqns[var] = diffeqns[var]
+
         self.subComponents = {}
 
     def lookupUnit(self, var):
@@ -384,7 +388,7 @@ class Component:
         if not self.outputs <= defined or invoked < set(self.subComponents.keys()):
             #out("//WARNING, circular dependency detected, dumping the rest.  You'll have to fix this manually.")
             for var in order((set(self.eqns.keys()) - defined)):
-                eqn.toCode(out)
+                self.eqns[var].toCode(out)
             for componentName in order(set(self.subComponents.keys())-invoked):
                 subComponent = self.subComponents[componentName]
                 subComponent.toCode(out,declared)
