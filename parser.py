@@ -840,7 +840,7 @@ def consolidateSystem(timeUnit, rootEncap, connections):
                 print undefinedInstructions
                 print len(undefinedInstructions)
                 print definedSymbols
-                assert(removeThisIter)
+                assert(removedThisIter)
             #print "---------------------------------------------------------------"
 
         #now we need to fix variable names.  ideally, we'd like to
@@ -1303,7 +1303,8 @@ class InternalMelodeeParser:
         for (exportName,newJunction) in junctionFromExportedName.items():
             (exists, oldJunction) = self.searchForJunction(exportName)
             if not exists:
-                self.currentEncapsulation().setJunction(exportName, newJunction)
+                self.currentEncapsulation().setJunction(exportName, newJunction,
+                                                        external=(newJunction in externalJunctions))
             else:
                 self.connections.substituteJunction(newJunction,oldJunction)
 
