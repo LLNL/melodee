@@ -382,7 +382,7 @@ class Component:
                 defined |= newFront
 
         if not self.outputs <= defined or invoked < set(self.subComponents.keys()):
-            out("//WARNING, circular dependency detected, dumping the rest.  You'll have to fix this manually.")
+            #out("//WARNING, circular dependency detected, dumping the rest.  You'll have to fix this manually.")
             for var in order((set(self.eqns.keys()) - defined)):
                 eqn.toCode(out)
             for componentName in order(set(self.subComponents.keys())-invoked):
