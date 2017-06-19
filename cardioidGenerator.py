@@ -62,10 +62,6 @@ class MyCCodeSympyPrinter(CCodePrinter):
                                  self.parenthesize(expr.rhs, PREC))
         else:
             return super(MyCCodeSympyPrinter, self)._print_Relational(expr)
-                                 
-        PREC = sympy.printing.precedence.precedence(expr)
-        return self.parenthesize("==".join([self._print(arg) for arg in expr.args]),PREC)
-
 
 def pretty(symbol):
     return str(symbol)
