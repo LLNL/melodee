@@ -530,13 +530,9 @@ subsystem ORd {
    tau_rel=bt/(1.0+0.0123/cajsr);
    if (tau_rel<0.001)
    {
-      tau_rel_use=0.001; 
+      tau_rel=0.001; 
    }
-   else
-   {
-      tau_rel_use=tau_rel;
-   }
-   Jrelnp.diff=(Jrel_inf-Jrelnp)/tau_rel_use;
+   Jrelnp.diff=(Jrel_inf-Jrelnp)/tau_rel;
 
    btp=1.25*bt;
    a_relp=0.5*btp;
@@ -548,13 +544,9 @@ subsystem ORd {
    tau_relp=btp/(1.0+0.0123/cajsr);
    if (tau_relp<0.001)
    {
-      tau_relp_use=0.001; 
+      tau_relp=0.001; 
    }
-   else
-   {
-      tau_relp_use=tau_relp;
-   }
-   Jrelp.diff=(Jrelp_inf-Jrelp)/tau_relp_use;
+   Jrelp.diff=(Jrelp_inf-Jrelp)/tau_relp;
    fJrelp=(1.0/(1.0+KmCaMK/CaMKa));
    Jrel=(1.0-fJrelp)*Jrelnp+fJrelp*Jrelp;
 
