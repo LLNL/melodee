@@ -505,7 +505,7 @@ void ThisReaction::calc(double _dt, const VectorDouble32& __Vm,
                      
     out.dec(2)
     out('''      
-      __dVm[__ii] = Iion;
+      __dVm[__ii] = -Iion;
    }
 }
 
