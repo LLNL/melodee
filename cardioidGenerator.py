@@ -179,7 +179,7 @@ def generateCardioid(model, targetName, headerFile, sourceFile):
         M = (F-L*gate).simplify()
         
         RLA = model.addInstruction("_%s_RLA" % gate, sympy.exp(dt*L))
-        RLB = model.addInstruction("_%s_RLB" % gate, M/L*(sympy.exp(dt*L)-1))
+        RLB = model.addInstruction("_%s_RLB" % gate, M/L*(RLA-1))
         gateTargets[gate] = (RLA,RLB)
 
     expensiveVars = model.extractExpensiveFunctions()
@@ -233,8 +233,15 @@ def generateCardioid(model, targetName, headerFile, sourceFile):
     out = headerFile
     out('''
 #include "Reaction.hh"
+#include "Interpolation.hh"
 #include "object.h"
 #include <vector>
+#include <sstream>
+
+namespace scanReaction 
+{
+    Reaction* scan%(target)s(OBJECT* obj, const int numPoints, const double __dt);
+}
 
 namespace %(target)s
 {
@@ -295,15 +302,10 @@ namespace %(target)s
         out("Interpolation _interpolant[%d];" % fitCount)
     out.dec(2)
     out('''
-
-      
+      friend Reaction* scanReaction::scan%(target)s(OBJECT* obj, const int numPoints, const double __dt);
    };
 }
 
-namespace scanReaction 
-{
-    Reaction* scan%(target)s(OBJECT* obj, const int numPoints, const double __dt);
-}
 ''', template)
 
     out = sourceFile
@@ -324,8 +326,10 @@ namespace scanReaction
 
 #include "%(target)s.hh"
 #include "object_cc.hh"
+#include "mpiUtils.h"
 #include <cmath>
 #include <cassert>
+#include <fstream>
 
 using namespace std;
 
@@ -334,7 +338,7 @@ namespace scanReaction
 
 #define setDefault(name, value) objectGet(obj, #name, reaction->name, #value)
    
-    Reaction* scan%(target)s(OBJECT* obj, const int numPoints, const double _dt)
+   Reaction* scan%(target)s(OBJECT* obj, const int numPoints, const double _dt)
    {
       %(target)s::ThisReaction* reaction = new %(target)s::ThisReaction(numPoints, _dt);
 
@@ -347,10 +351,78 @@ namespace scanReaction
     model.printTarget(good, params, paramPrinter)
     good |= params
     out.dec(2)
-    out('''
-      
+    out(r'''
+      string fitName;
+      objectGet(obj, "fit", fitName, "");
+      if (fitName != "")
+      {
+         OBJECT* fitObj = objectFind(fitName, "FIT");
+         double _fit_dt; objectGet(fitObj, "dt", _fit_dt, "nan");''' % template)
+    out.inc(3)
+    for var in order(params):
+        out('double _fit_%s; objectGet(fitObj, "%s", _fit_%s, "nan");''',var,var,var)
+    out.dec(3)
+    out(r'''
+         if (_dt == _fit_dt''' % template)
+    out.inc(4)
+    for var in order(params):
+        out("&& _fit_%s == reaction->%s",var,var)
+    out.dec(4)
+    out(r'''
+         )
+         {
+            vector<string> functions;
+            objectGet(fitObj, "functions", functions);
+            OBJECT* funcObj;
+            for (int _ii=0; _ii<functions.size(); _ii++)
+            {
+               OBJECT* funcObj = objectFind(functions[_ii], "FUNCTION");
+               objectGet(funcObj, "numer", reaction->_interpolant[_ii].numNumer_, "-1");
+               objectGet(funcObj, "denom", reaction->_interpolant[_ii].numDenom_, "-1");
+               objectGet(funcObj, "coeff", reaction->_interpolant[_ii].coeff_);
+            }
+            return reaction;
+         }
+      }
+
       reaction->createInterpolants(_dt);
 
+      //save the interpolants
+      if (getRank(0) == 0)
+      {
+         int funcCount = sizeof(reaction->_interpolant)/sizeof(reaction->_interpolant[0]);
+         ofstream outfile((fitName +".data").c_str());
+         outfile.precision(16);
+         fitName = string(obj->name) + "_fit";
+         outfile << obj->name << " REACTION { fit=" << fitName << "; }\n";
+         outfile << fitName << " FIT {\n";
+         outfile << "   dt = " << _dt << ";\n";''' % template)
+    out.inc(3)
+    for var in order(params):
+        out(r'outfile << "   %s = " << reaction->%s << ";\n";', var, var)
+    out.dec(3)
+    out(r'''
+         outfile << "   functions = ";
+         for (int _ii=0; _ii<funcCount; _ii++) {
+            outfile << obj->name << "_interpFunc" << _ii << " ";
+         }
+         outfile << ";\n";
+         outfile << "}\n";
+
+         for (int _ii=0; _ii<funcCount; _ii++)
+         {
+            outfile << obj->name << "_interpFunc" << _ii << " FUNCTION { "
+                         << "numer=" << reaction->_interpolant[_ii].numNumer_ << "; "
+                         << "denom=" << reaction->_interpolant[_ii].numDenom_ << "; "
+                         << "coeff=";
+            for (int _jj=0; _jj<reaction->_interpolant[_ii].coeff_.size(); _jj++)
+            {
+               outfile << reaction->_interpolant[_ii].coeff_[_jj] << " ";
+            }
+            outfile << "; }\n";
+         }
+         outfile.close();
+      }
       return reaction;
    }
 #undef setDefault
@@ -452,7 +524,7 @@ void ThisReaction::createInterpolants(const double _dt) {
         out("_outputs[_ii] = %(target)s;", lookup)
         out.dec()
         out("}")
-        out("_interpolant[%(fitCount)s] = makeInterpolant(_inputs,_outputs);",lookup)
+        out("_interpolant[%(fitCount)s].create(_inputs,_outputs, 1e-4);",lookup)
         out.dec()
         out("}")
     out.dec()
