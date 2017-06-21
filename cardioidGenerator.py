@@ -298,8 +298,7 @@ namespace %(target)s
       std::vector<State> state_;
       double __cachedDt;''', template)
     out.inc(2)
-    if fitCount>0:
-        out("Interpolation _interpolant[%d];" % fitCount)
+    out("Interpolation _interpolant[%d];" % fitCount)
     out.dec(2)
     out('''
       friend Reaction* scanReaction::scan%(target)s(OBJECT* obj, const int numPoints, const double __dt);
@@ -354,6 +353,7 @@ namespace scanReaction
     out(r'''
       string fitName;
       objectGet(obj, "fit", fitName, "");
+      int funcCount = sizeof(reaction->_interpolant)/sizeof(reaction->_interpolant[0]);
       if (fitName != "")
       {
          OBJECT* fitObj = objectFind(fitName, "FIT");
@@ -374,24 +374,26 @@ namespace scanReaction
             vector<string> functions;
             objectGet(fitObj, "functions", functions);
             OBJECT* funcObj;
-            for (int _ii=0; _ii<functions.size(); _ii++)
+            if (functions.size() == funcCount)
             {
-               OBJECT* funcObj = objectFind(functions[_ii], "FUNCTION");
-               objectGet(funcObj, "numer", reaction->_interpolant[_ii].numNumer_, "-1");
-               objectGet(funcObj, "denom", reaction->_interpolant[_ii].numDenom_, "-1");
-               objectGet(funcObj, "coeff", reaction->_interpolant[_ii].coeff_);
+               for (int _ii=0; _ii<functions.size(); _ii++)
+               {
+                  OBJECT* funcObj = objectFind(functions[_ii], "FUNCTION");
+                  objectGet(funcObj, "numer", reaction->_interpolant[_ii].numNumer_, "-1");
+                  objectGet(funcObj, "denom", reaction->_interpolant[_ii].numDenom_, "-1");
+                  objectGet(funcObj, "coeff", reaction->_interpolant[_ii].coeff_);
+               }
+               return reaction;
             }
-            return reaction;
          }
       }
 
       reaction->createInterpolants(_dt);
 
       //save the interpolants
-      if (getRank(0) == 0)
+      if (funcCount > 0 && getRank(0) == 0)
       {
-         int funcCount = sizeof(reaction->_interpolant)/sizeof(reaction->_interpolant[0]);
-         ofstream outfile((fitName +".data").c_str());
+         ofstream outfile((string(obj->name) +".fit.data").c_str());
          outfile.precision(16);
          fitName = string(obj->name) + "_fit";
          outfile << obj->name << " REACTION { fit=" << fitName << "; }\n";
@@ -412,9 +414,9 @@ namespace scanReaction
          for (int _ii=0; _ii<funcCount; _ii++)
          {
             outfile << obj->name << "_interpFunc" << _ii << " FUNCTION { "
-                         << "numer=" << reaction->_interpolant[_ii].numNumer_ << "; "
-                         << "denom=" << reaction->_interpolant[_ii].numDenom_ << "; "
-                         << "coeff=";
+                    << "numer=" << reaction->_interpolant[_ii].numNumer_ << "; "
+                    << "denom=" << reaction->_interpolant[_ii].numDenom_ << "; "
+                    << "coeff=";
             for (int _jj=0; _jj<reaction->_interpolant[_ii].coeff_.size(); _jj++)
             {
                outfile << reaction->_interpolant[_ii].coeff_[_jj] << " ";
