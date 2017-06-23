@@ -329,6 +329,7 @@ namespace %(target)s
 #include <cmath>
 #include <cassert>
 #include <fstream>
+#include <iostream>
 
 using namespace std;
 
@@ -486,7 +487,7 @@ void assertStateOrderAndVarNamesAgree(void)
     out('''
 }
    
-    ThisReaction::ThisReaction(const int numPoints, const double __dt)
+ThisReaction::ThisReaction(const int numPoints, const double __dt)
 : nCells_(numPoints)
 {
    assertStateOrderAndVarNamesAgree();
@@ -500,8 +501,13 @@ void ThisReaction::createInterpolants(const double _dt) {
 ''', template)
 
     out.inc()
-    for target in order(interps.keys()):
-        fit,fitCount = interps[target]
+    fitMap = []
+    for fit in range(0,len(interps)):
+        fitMap.append(0)
+    for target,(fit,fitCount) in interps.items():
+        fitMap[fitCount] = (target,fit)
+    for fitCount in range(0,len(interps)):
+        target,fit = fitMap[fitCount]
         (lb,ub,inc) = model.info("interp",fit).split(",")
         lookup = {
             "target" : pretty(target),
@@ -526,7 +532,15 @@ void ThisReaction::createInterpolants(const double _dt) {
         out("_outputs[_ii] = %(target)s;", lookup)
         out.dec()
         out("}")
-        out("_interpolant[%(fitCount)s].create(_inputs,_outputs, 1e-4);",lookup)
+        out(r'''
+double relError = 1e-4;
+double actualTolerance = _interpolant[%(fitCount)d].create(_inputs,_outputs, tolerance);
+if (actualTolerance > relError  && getRank(0) == 0)
+{
+   cerr << "Warning: Could not meet tolerance for %(target)s: " 
+        << actualTolerance " > " << relError
+        << " target" << endl;
+}''', lookup)
         out.dec()
         out("}")
     out.dec()

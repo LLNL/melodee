@@ -31,14 +31,16 @@ shared Iion {uA/uF};
 shared V_init {mV};
 
 subsystem ORd {
-   provides @interp(-1000,1000,1e-2) v {mV} = V;
+   provides @interp(-100,100,1e-2) v {mV} = V;
+   //provides v {mV} = V;
    provides V_init = -85;
 
    diffvar nai {mM};
    diffvar nass {mM};
    diffvar ki {mM};
    diffvar kss {mM};
-   diffvar @interp(1e-5,1e-2,1e-5) cai {mM};
+   diffvar @interp(1e-5,1e-3,1e-5) cai {mM};
+   //diffvar cai {mM};
    diffvar cass {mM};
    diffvar cansr {mM};
    diffvar cajsr {mM};
@@ -216,6 +218,7 @@ subsystem ORd {
 
    diffvar @gate d ff fs fcaf fcas nca ffp fcafp {1};
    diffvar @interp(0,1,1e-4) @gate jca {1};
+   //diffvar @gate jca {1};
    d.init=0;
    ff.init=1;
    fs.init=1;
