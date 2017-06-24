@@ -534,7 +534,7 @@ void ThisReaction::createInterpolants(const double _dt) {
         out("}")
         out(r'''
 double relError = 1e-4;
-double actualTolerance = _interpolant[%(fitCount)d].create(_inputs,_outputs, tolerance);
+        double actualTolerance = _interpolant[%(fitCount)d].create(_inputs,_outputs, relError);
 if (actualTolerance > relError  && getRank(0) == 0)
 {
    cerr << "Warning: Could not meet tolerance for %(target)s: " 
