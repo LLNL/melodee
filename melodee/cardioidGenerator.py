@@ -30,9 +30,9 @@ from sympy.printing.ccode import CCodePrinter
 from sympy.core import S
 
 
-from parser import MelodeeParser,Differentiator
-import utility
-from utility import order
+from melodee.parser import MelodeeParser,Differentiator
+from melodee import utility
+from melodee.utility import order
 
 def repeat(thing, repetitions):
     return (thing,) * repetitions

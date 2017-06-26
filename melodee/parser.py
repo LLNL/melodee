@@ -30,7 +30,7 @@ import sympy
 import ply.lex as lex
 import ply.yacc as yacc
 
-import units
+import melodee.units
 
 ###################################################################
 #these parts make up the external API

@@ -28,9 +28,9 @@ import re
 from sympy.printing.octave import octave_code
 
 
-from parser import MelodeeParser
-import utility
-from utility import order
+from melodee.parser import MelodeeParser
+from melodee import utility
+from melodee.utility import order
 
 def pretty(symbol):
     return str(symbol)
