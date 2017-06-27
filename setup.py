@@ -14,7 +14,7 @@ setup(
           'Operating System :: OS Independent',
           'Programming Language :: Python',
           'Programming Language :: Python 2',
-          'Programming Language :: Python 3'
+          'Programming Language :: Python 3',
       ],
       url='https://github.com/llnl/melodee',
       author='Robert Clayton Blake III',
@@ -23,6 +23,6 @@ setup(
       packages=['melodee'],
       install_requires=[
           'sympy',
-          'ply'
+          'ply',
       ],
       zip_safe=False)
