@@ -538,7 +538,7 @@ double actualTolerance = _interpolant[%(fitCount)d].create(_inputs,_outputs, rel
 if (actualTolerance > relError  && getRank(0) == 0)
 {
    cerr << "Warning: Could not meet tolerance for %(target)s: " 
-        << actualTolerance " > " << relError
+        << actualTolerance << " > " << relError
         << " target" << endl;
 }''', lookup)
         out.dec()
