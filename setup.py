@@ -25,4 +25,5 @@ setup(
           'sympy',
           'ply',
       ],
-      zip_safe=False)
+      zip_safe=False,
+)
