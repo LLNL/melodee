@@ -26,7 +26,7 @@
 from xml.etree import cElementTree as ET
 import sys
 import re
-from utility import Indenter,order,unzip
+from melodee.utility import Indenter,order,unzip
 
 xmlns = {"http://www.cellml.org/cellml/1.0#" : "cellml",
          "http://www.w3.org/1998/Math/MathML" : "math",
