@@ -150,7 +150,7 @@ void cpu_advance_be1(REAL _t, REAL _t_end, REAL *_y_global, REAL *_y_global_temp
 }
 ''' % template)
 
-if __name__=="__main__":
+def main():
     import sys
     
     p = MelodeeParser()

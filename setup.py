@@ -24,6 +24,14 @@ setup(
       install_requires=[
           'sympy',
           'ply',
+          'xml',
       ],
       zip_safe=False,
+      entry_points = {
+          'console_scripts' : ['cardioidGenerator=melodee.cardioidGenerator:main',
+                               'continuityGenerator=melodee.continuityGenerator:main',
+                               'cellmlConverter=melodee.cellmlConverter:main',
+                               'matlabGenerator=melodee.matlabGenerator:main',
+          ]
+      },
 )

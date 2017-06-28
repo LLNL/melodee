@@ -668,7 +668,7 @@ void ThisReaction::getCheckpointInfo(vector<string>& fieldNames,
 
 }''', template)
 
-if __name__=="__main__":
+def main():
     import sys
     
     p = MelodeeParser()
