@@ -276,7 +276,7 @@ class Component:
             if var.get("initial_value"):
                 self.eqns[name] = Equation(name, var.get("initial_value"), units[var.get("units")])
             self.varToUnit[name] = units[var.get("units")]
-        mathElement = element.find("math")
+        mathElement = root.find("math")
         if mathElement:
             for eqnElement in mathElement.findall("apply"):
                 eqn = parseEquation(eqnElement, self.varToUnit)
