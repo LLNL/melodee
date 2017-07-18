@@ -468,7 +468,6 @@ int getVarOffset(const std::string& varName)
          return ivar;
       }
    }
-   assert(0 && "Control should never get here.");
    return -1;
 }
 
@@ -640,7 +639,12 @@ const string ThisReaction::getUnit(const std::string& varName) const
 #define HANDLE_OFFSET 1000
 int ThisReaction::getVarHandle(const std::string& varName) const
 {
-   return getVarOffset(varName)+HANDLE_OFFSET;
+   int retVal = getVarOffset(varName);
+   if (retVal >= 0)
+   {
+      retVal += HANDLE_OFFSET;
+   }
+   return retVal;
 }
 
 void ThisReaction::setValue(int iCell, int varHandle, double value) 
