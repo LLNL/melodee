@@ -158,7 +158,8 @@ def parseRhs(rhsElement):
         if sep != None:
             text += 'e'+sep.tail.strip()
         if rhsElement.get("units",""):
-            text += "{"+printUnit(units[rhsElement.get("units")])+"}"
+            pass
+            #text += "{"+printUnit(units[rhsElement.get("units")])+"}"
         return (text, set())
     elif rhsElement.tag == "true":
         return ("true", set())
