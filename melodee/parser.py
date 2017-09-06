@@ -206,6 +206,8 @@ class MelodeeParser:
         return self._parser.parse(text)
     def getModel(self, target):
         return self._parser.getModel(target)
+    def getUnits(self):
+        return self._parser.si
 
 class Differentiator:
     '''This class differentiates a ConsolidatedSystem, caching results as
