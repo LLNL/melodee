@@ -351,22 +351,27 @@ namespace scanReaction
     model.printTarget(good, params, paramPrinter)
     good |= params
     out.dec(2)
+
+    fitDependencies = model.allDependencies(good|polyfits,allfits) & good
     out(r'''
       string fitName;
       objectGet(obj, "fit", fitName, "");
       int funcCount = sizeof(reaction->_interpolant)/sizeof(reaction->_interpolant[0]);
       if (fitName != "")
       {
-         OBJECT* fitObj = objectFind(fitName, "FIT");
-         double _fit_dt; objectGet(fitObj, "dt", _fit_dt, "nan");''' % template)
+         OBJECT* fitObj = objectFind(fitName, "FIT");''' % template)
     out.inc(3)
-    for var in order(params):
+    if dt in fitDependencies:
+        out('double _fit_dt; objectGet(fitObj, "dt", _fit_dt, "nan");')
+    for var in order(fitDependencies-set([dt])):
         out('double _fit_%s; objectGet(fitObj, "%s", _fit_%s, "nan");''',var,var,var)
     out.dec(3)
     out(r'''
-         if (_dt == _fit_dt''' % template)
+         if (1''' % template)
     out.inc(4)
-    for var in order(params):
+    if dt in fitDependencies:
+        out("&& _fit_dt == _dt")
+    for var in order(fitDependencies-set([dt])):
         out("&& _fit_%s == reaction->%s",var,var)
     out.dec(4)
     out(r'''
@@ -398,10 +403,12 @@ namespace scanReaction
          outfile.precision(16);
          fitName = string(obj->name) + "_fit";
          outfile << obj->name << " REACTION { fit=" << fitName << "; }\n";
-         outfile << fitName << " FIT {\n";
-         outfile << "   dt = " << _dt << ";\n";''' % template)
+         outfile << fitName << " FIT {\n";''' % template)
+
     out.inc(3)
-    for var in order(params):
+    if dt in fitDependencies:
+        out(r'outfile << "   dt = " << _dt << ";\n";')
+    for var in order(fitDependencies-set([dt])):
         out(r'outfile << "   %s = " << reaction->%s << ";\n";', var, var)
     out.dec(3)
     out(r'''
