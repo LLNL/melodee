@@ -167,13 +167,13 @@ def generateCardioid(model, targetName, headerFile, sourceFile):
 
     differ = Differentiator(model, diffvars | params | set([V]))
     gateJacobians = {}
-    for gate in gates:
+    for gate in order(gates):
         (gateJacobians[gate],dontcare) = differ.diff(diffvarUpdate[gate],gate)
     differ.augmentInstructions()
 
     dt = model.addSymbol("_dt")
     gateTargets = {}
-    for gate in gates:
+    for gate in order(gates):
         F = model.ssa[diffvarUpdate[gate]].sympy
         L = model.ssa[gateJacobians[gate]].sympy
         M = (F-L*gate).simplify()
