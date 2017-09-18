@@ -84,17 +84,22 @@ def numberVars(diffvars):
         count += 1
     return ret
 
-def generateMatlab(model, targetName, initFile, diffFile):
+def generateMatlab(model, targetName, initFile, diffFile, traceFile):
     template = {}
     template["target"] = targetName
 
+    inputs = model.inputs()
+    if inputs:
+        template["arglower"] = 1
+    else:
+        template["arglower"] = 0
 
     out = initFile
     params = model.varsWithAttribute("param")
     printer = MatlabPrintVisitor(out,model.ssa,params)
     out("""
 function [__y_init, __ordering, __params] = %(target)s_init(varargin)
-   narginchk(0,1);
+   narginchk(0+%(arglower)d,1);
    if (nargin >= 1)
       __params = varargin{1};
    else
@@ -113,8 +118,8 @@ function [__y_init, __ordering, __params] = %(target)s_init(varargin)
         good.add(model.time)
     else:
         timename = "__current_time"
+    template["timename"] = timename
 
-    inputs = model.inputs()
     if inputs:
         out("%define the inputs")
         good |= inputs
@@ -143,15 +148,13 @@ end
     out = diffFile
     printer = MatlabPrintVisitor(out,model.ssa,params)
     out("""
-function __dydt = %(target)s(__time,__diffvars,varargin)
+function __dydt = %(target)s(%(timename)s,__diffvars,varargin)
 """ % template)
     out.inc()
     out("__dydt = zeros(%d,1);" % len(diffvarNumbering))
     
     good = set()
     if model.time != None:
-        out("% define time")
-        out("%s = __time;",timename)
         good.add(model.time)
 
     out("% make copies of the differential vars")
@@ -159,13 +162,8 @@ function __dydt = %(target)s(__time,__diffvars,varargin)
         out("%s = __diffvars(%d);", pretty(var), diffvarNumbering[var])
     good |= diffvars
 
-    if inputs:
-        template["arglower"] = 3
-    else:
-        template["arglower"] = 2
-
     out("""
-narginchk(%(arglower)d,3);
+narginchk(2+%(arglower)d,3);
 if (nargin >= 3)
     __params = varargin{1};
 else
@@ -191,15 +189,59 @@ end
     out("""
 end""" % template)
 
-if __name__=="__main__":
+    out = traceFile
+    printer = MatlabPrintVisitor(out, model.ssa, params)
+    out("""
+function __trace = %(target)s_trace(%(timename)s,__diffvars,varargin)
+""" % template)
+    out.inc()
+    out("% make copies of the differential vars")
+    for var in order(diffvars):
+        out("%s = __diffvars(:,%d);", pretty(var), diffvarNumbering[var])
+    out("""
+narginchk(2+%(arglower)d,3);
+if (nargin >= 3)
+    __params = varargin{1};
+else
+   __params = struct();
+end
+""" % template)
+    if inputs:
+        out("% define all inputs")
+        good |= inputs
+        for symbol in order(inputs):
+            out("%s = __params.%s(%s);",pretty(symbol),pretty(symbol),timename)
+
+    tracevars = model.varsWithAttribute("trace")
+    out("%calculate the tracing vars we need")
+    model.printTarget(good,tracevars-good,printer)
+    
+    out("%save the tracing vars")
+    out("__trace = struct();")
+    for var in order(tracevars):
+        out('__trace.%s = %s;', var, var)
+    out.dec()
+    out("""
+end""" % template)
+
+def main():
     import sys
+    import argparse
+    ap=argparse.ArgumentParser(description="Convert Melodee into Matlab functions")
+    ap.add_argument("target",
+                    help="Comma separated list of subsystems to generate",
+                    )
+    ap.add_argument("filenames", nargs=argparse.REMAINDER,
+                    help="Filenames containing all the targets",
+                    )
+    options=ap.parse_args()
+    target = options.target
+    filenames = options.filenames
     
     p = MelodeeParser()
 
-    sys.argv.pop(0)
-    target = sys.argv.pop(0)
     models = {}
-    for filename in sys.argv:
+    for filename in filenames:
         p.parse(open(filename,"r").read())
     originalTargets = target.split(",")
     if len(originalTargets) > 1:
@@ -216,4 +258,5 @@ if __name__=="__main__":
                    #utility.Indenter(sys.stdout),
                    utility.Indenter(open(target+"_init.m","w")),
                    utility.Indenter(open(target+".m","w")),
+                   utility.Indenter(open(target+"_trace.m","w")),
     )
