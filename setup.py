@@ -24,7 +24,7 @@ setup(
       install_requires=[
           'sympy',
           'ply',
-          'xml',
+          #'xml',
       ],
       zip_safe=False,
       entry_points = {
