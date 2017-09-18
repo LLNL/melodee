@@ -26,7 +26,7 @@
 import sys
 import re
 import sympy
-from sympy.printing.ccode import CCodePrinter
+from sympy.printing.ccode import C99CodePrinter
 from sympy.core import S
 
 
@@ -37,9 +37,9 @@ from melodee.utility import order
 def repeat(thing, repetitions):
     return (thing,) * repetitions
 
-class MyCCodeSympyPrinter(CCodePrinter):
+class MyCCodeSympyPrinter(C99CodePrinter):
     def __init__(self,*args,**kwargs):
-        CCodePrinter.__init__(self,*args,**kwargs)
+        C99CodePrinter.__init__(self,*args,**kwargs)
     def _print_Pow(self, expr):
         PREC = sympy.printing.precedence.precedence(expr)
         if expr.exp == 0:
