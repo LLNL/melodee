@@ -28,9 +28,12 @@ import sys
 import re
 from melodee.utility import Indenter,order,unzip
 
+inlineUnits = True
+
 xmlns = {"http://www.cellml.org/cellml/1.0#" : "cellml",
          "http://www.w3.org/1998/Math/MathML" : "math",
          }
+
 def registerNamespaces():
     for longName, shortName in xmlns.items():
         ET.register_namespace(shortName, longName)
@@ -158,8 +161,8 @@ def parseRhs(rhsElement):
         if sep != None:
             text += 'e'+sep.tail.strip()
         if rhsElement.get("units",""):
-            pass
-            #text += "{"+printUnit(units[rhsElement.get("units")])+"}"
+            if inlineUnits:
+                text += "{"+printUnit(units[rhsElement.get("units")])+"}"
         return (text, set())
     elif rhsElement.tag == "true":
         return ("true", set())
@@ -576,7 +579,19 @@ units = {
 def main():
     import sys;
     import os;
-    cellmlFilename = sys.argv[1];
+
+    import argparse
+    parser=argparse.ArgumentParser(description="Convert CellML files to Melodee.")
+    parser.add_argument("--inline-units", "-u",
+                        action="store_true",
+                        help="Print out the units of all constants in the CellML file",
+                        dest="inlineUnits")
+    parser.add_argument("filename")
+    result = parser.parse_args()
+    cellmlFilename = result.filename
+    global inlineUnits
+    inlineUnits=result.inlineUnits
+
     root = stripNamespaces(ET.parse(cellmlFilename))
 
     parseUnits(units, root.findall("units"))
