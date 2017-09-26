@@ -25,7 +25,7 @@
 
 import sys
 import re
-from sympy.printing.octave import octave_code
+from sympy.printing.octave import OctaveCodePrinter
 
 
 from melodee.parser import MelodeeParser
@@ -35,12 +35,22 @@ from melodee.utility import order
 def pretty(symbol):
     return str(symbol)
 
+class MyOctaveCodeSympyPrinter(OctaveCodePrinter):
+    def __init__(self,*args,**kwargs):
+        OctaveCodePrinter.__init__(self, *args, **kwargs)
+    def _print_Symbol(self,symbol):
+        if str(symbol)[0] == '_':
+            return "U"+str(symbol)
+        else:
+            return str(symbol)
 
 class MatlabPrintVisitor:
     def __init__(self, out, ssa, params):
         self.out = out
         self.ssa = ssa
         self.params = params
+        self.oprinter = MyOctaveCodeSympyPrinter()
+        
     def ifPrint(self,printer,ifSymbol,thenList,elseList,choiceList):
         self.out("if (%s)",pretty(ifSymbol))
         self.out.inc()
@@ -64,17 +74,18 @@ class MatlabPrintVisitor:
         self.out.dec()
         self.out("end")
     def equationPrint(self,lhs,rhs):
-        rhsText = octave_code(rhs.sympy)
+        rhsText = self.oprinter.doprint(rhs.sympy)
+        lhsText = self.oprinter.doprint(lhs)
         if lhs in self.params:
             self.out("""
-if (isfield(__params, '%(name)s'))
-   %(name)s = __params.%(name)s;
+if (isfield(U_params, '%(name)s'))
+   %(name)s = U_params.%(name)s;
 else
    %(name)s = %(rhs)s;
-   __params.%(name)s = %(name)s;
-end""", name=pretty(lhs), rhs=rhsText)
+   U_params.%(name)s = %(name)s;
+end""", name=lhsText, rhs=rhsText)
         else:
-            self.out("%s = %s;", pretty(lhs), rhsText)
+            self.out("%s = %s;", lhsText, rhsText)
 
 def numberVars(diffvars):
     ret = {}
@@ -98,12 +109,12 @@ def generateMatlab(model, targetName, initFile, diffFile, traceFile):
     params = model.varsWithAttribute("param")
     printer = MatlabPrintVisitor(out,model.ssa,params)
     out("""
-function [__y_init, __ordering, __params] = %(target)s_init(varargin)
+function [U_y_init, U_ordering, U_params] = %(target)s_init(varargin)
    narginchk(0+%(arglower)d,1);
    if (nargin >= 1)
-      __params = varargin{1};
+      U_params = varargin{1};
    else
-      __params = struct();
+      U_params = struct();
    end
 """ % template)
     out.inc()
@@ -117,14 +128,14 @@ function [__y_init, __ordering, __params] = %(target)s_init(varargin)
         out("%s = 0;",timename)
         good.add(model.time)
     else:
-        timename = "__current_time"
+        timename = "U_current_time"
     template["timename"] = timename
 
     if inputs:
         out("%define the inputs")
         good |= inputs
     for symbol in order(inputs):
-        out("%s = __params.%s(%s);",pretty(symbol),pretty(symbol),timename)
+        out("%s = U_params.%s(%s);",pretty(symbol),pretty(symbol),timename)
 
     out("\n\n")
     out("%define the initial conditions")
@@ -132,13 +143,13 @@ function [__y_init, __ordering, __params] = %(target)s_init(varargin)
     model.printTarget(good,params|diffvars,printer)
 
     diffvarNumbering = numberVars(diffvars)
-    out("__y_init = zeros(%d, 1);", len(diffvarNumbering))
+    out("U_y_init = zeros(%d, 1);", len(diffvarNumbering))
     for var in order(diffvars):
-        out("__y_init(%d) = %s;",diffvarNumbering[var],pretty(var))
+        out("U_y_init(%d) = %s;",diffvarNumbering[var],pretty(var))
 
-    out("__ordering = struct();")
+    out("U_ordering = struct();")
     for var in order(diffvars):
-        out("__ordering.%s = %d;", pretty(var),diffvarNumbering[var])
+        out("U_ordering.%s = %d;", pretty(var),diffvarNumbering[var])
         
     out.dec()
     out("""
@@ -148,10 +159,10 @@ end
     out = diffFile
     printer = MatlabPrintVisitor(out,model.ssa,params)
     out("""
-function __dydt = %(target)s(%(timename)s,__diffvars,varargin)
+function U_dydt = %(target)s(%(timename)s,U_diffvars,varargin)
 """ % template)
     out.inc()
-    out("__dydt = zeros(%d,1);" % len(diffvarNumbering))
+    out("U_dydt = zeros(%d,1);" % len(diffvarNumbering))
     
     good = set()
     if model.time != None:
@@ -159,15 +170,15 @@ function __dydt = %(target)s(%(timename)s,__diffvars,varargin)
 
     out("% make copies of the differential vars")
     for var in order(diffvars):
-        out("%s = __diffvars(%d);", pretty(var), diffvarNumbering[var])
+        out("%s = U_diffvars(%d);", pretty(var), diffvarNumbering[var])
     good |= diffvars
 
     out("""
 narginchk(2+%(arglower)d,3);
 if (nargin >= 3)
-    __params = varargin{1};
+    U_params = varargin{1};
 else
-   __params = struct();
+   U_params = struct();
 end
 """ % template)
         
@@ -175,7 +186,7 @@ end
         out("% define all inputs")
         good |= inputs
         for symbol in order(inputs):
-            out("%s = __params.%s(%s);",pretty(symbol),pretty(symbol),timename)
+            out("%s = U_params.%s(%s);",pretty(symbol),pretty(symbol),timename)
 
     out("% define the differential update")
     diffvarUpdate = {var : model.diffvarUpdate(var) for var in diffvars}
@@ -183,7 +194,7 @@ end
 
     out("% stuff the differential update into an array")
     for var in order(diffvars):
-        out("__dydt(%d) = %s;", diffvarNumbering[var], pretty(diffvarUpdate[var]))
+        out("U_dydt(%d) = %s;", diffvarNumbering[var], pretty(diffvarUpdate[var]))
 
     out.dec()
     out("""
@@ -192,34 +203,34 @@ end""" % template)
     out = traceFile
     printer = MatlabPrintVisitor(out, model.ssa, params)
     out("""
-function __trace = %(target)s_trace(%(timename)s,__diffvars,varargin)
+function U_trace = %(target)s_trace(%(timename)s,U_diffvars,varargin)
 """ % template)
     out.inc()
     out("% make copies of the differential vars")
     for var in order(diffvars):
-        out("%s = __diffvars(:,%d);", pretty(var), diffvarNumbering[var])
+        out("%s = U_diffvars(:,%d);", pretty(var), diffvarNumbering[var])
     out("""
 narginchk(2+%(arglower)d,3);
 if (nargin >= 3)
-    __params = varargin{1};
+    U_params = varargin{1};
 else
-   __params = struct();
+   U_params = struct();
 end
 """ % template)
     if inputs:
         out("% define all inputs")
         good |= inputs
         for symbol in order(inputs):
-            out("%s = __params.%s(%s);",pretty(symbol),pretty(symbol),timename)
+            out("%s = U_params.%s(%s);",pretty(symbol),pretty(symbol),timename)
 
     tracevars = model.varsWithAttribute("trace")
     out("%calculate the tracing vars we need")
     model.printTarget(good,tracevars-good,printer)
     
     out("%save the tracing vars")
-    out("__trace = struct();")
+    out("U_trace = struct();")
     for var in order(tracevars):
-        out('__trace.%s = %s;', var, var)
+        out('U_trace.%s = %s;', var, var)
     out.dec()
     out("""
 end""" % template)
