@@ -160,6 +160,7 @@ def generateCardioid(model, targetName, headerFile, sourceFile):
     params = model.varsWithAttribute("param")
     gates = model.varsWithAttribute("gate") & diffvars
     polyfits = model.varsWithAttribute("interp")
+    tracevars = model.varsWithAttribute("trace")
     
     V = model.input("V")
     V_init = model.output("V_init")
@@ -280,6 +281,7 @@ namespace %(target)s
       virtual int getVarHandle(const std::string& varName) const;
       virtual void setValue(int iCell, int varHandle, double value);
       virtual double getValue(int iCell, int varHandle) const;
+      virtual double getValue(int iCell, int varHandle, double V) const;
       virtual const std::string getUnit(const std::string& varName) const;
 
     public:
@@ -446,57 +448,10 @@ string ThisReaction::methodName() const
 {
    return "%(target)s";
 }
-const char* varNames[] = 
-{''', template)
-    out.inc()
-    varNames = ['"'+pretty(var)+'"' for var in order(diffvars)]
-    out(",\n".join(varNames))
-    out.dec()
-    out('''
-};
-const char* varUnits[] =
-{''', template)
-    out.inc()
-    #varUnits = ['"'+units[var]+'"' for var in order(diffvars)]
-    varUnits = ['"%s"'%str(model.ssa[var].astUnit.rawUnit) for var in order(diffvars)]
-    out(",\n".join(varUnits))
-    out.dec()
-    out('''
-};
-
-#define NUMVARS (sizeof(varNames)/sizeof(char*))
-
-int getVarOffset(const std::string& varName)
-{
-   for (int ivar=0; ivar<NUMVARS; ivar++) 
-   {
-      if (varNames[ivar] == varName) 
-      {
-         return ivar;
-      }
-   }
-   return -1;
-}
-
-void assertStateOrderAndVarNamesAgree(void)
-{
-   State s;
-#define checkVarOrder(x) assert(reinterpret_cast<double*>(&s)+getVarOffset(#x) == &s . x)
-
-   int STATIC_ASSERT_checkAllDouble[(NUMVARS == sizeof(s)/sizeof(double))? 1: 0];
-
-   //EDIT_STATE''', template)
-    out.inc()
-    for var in order(diffvars):
-        out('checkVarOrder(%s);',pretty(var))
-    out.dec()
-    out('''
-}
    
 ThisReaction::ThisReaction(const int numPoints, const double __dt)
 : nCells_(numPoints)
 {
-   assertStateOrderAndVarNamesAgree();
    state_.resize(nCells_);
    perCellFlags_.resize(nCells_);
    perCellParameters_.resize(nCells_);
@@ -638,43 +593,99 @@ void ThisReaction::initializeMembraneVoltage(VectorDouble32& __Vm)
    state_.assign(state_.size(), __initState);
 }
 
+enum varHandles
+{''', template)
+    out.inc()
+    for var in order(diffvars)+order(tracevars-diffvars):
+        out('%s_handle,',pretty(var))
+    out.dec()
+    out('''
+   NUMHANDLES
+};
+
 const string ThisReaction::getUnit(const std::string& varName) const
 {
-   return varUnits[getVarOffset(varName)];
+   if(0) {}''', template)
+    out.inc()
+    for var in order(diffvars|tracevars):
+        varUnit = model.ssa[var].astUnit
+        if varUnit.isNull():
+            unitText = "INVALID"
+        else:
+            unitText = str(varUnit.rawUnit)
+        out('else if (varName == "%s") { return "%s"; }',pretty(var),unitText)
+    out.dec()
+    out('''
+   return "INVALID";
 }
 
 #define HANDLE_OFFSET 1000
 int ThisReaction::getVarHandle(const std::string& varName) const
 {
-   int retVal = getVarOffset(varName);
-   if (retVal >= 0)
-   {
-      retVal += HANDLE_OFFSET;
-   }
-   return retVal;
+   if (0) {}''', template)
+    out.inc()
+    for var in order(diffvars|tracevars):
+        out('else if (varName == "%s") { return %s_handle; }', pretty(var), pretty(var))
+    out.dec()
+    out('''
+
+   return -1;
 }
 
 void ThisReaction::setValue(int iCell, int varHandle, double value) 
 {
-   reinterpret_cast<double*>(&state_[iCell])[varHandle-HANDLE_OFFSET] = value;
+   if (0) {}''', template)
+    out.inc()
+    for var in order(diffvars):
+        out('else if (varHandle == %s_handle) { state_[iCell].%s = value; }', pretty(var), pretty(var))
+    out.dec()
+    out('''
 }
 
 
 double ThisReaction::getValue(int iCell, int varHandle) const
-{
-   return reinterpret_cast<const double*>(&state_[iCell])[varHandle-HANDLE_OFFSET];
+{''', template)
+    out.inc()
+    out('if (0) {}')
+    for var in order(diffvars):
+        out('else if (varHandle == %s_handle) { return state_[iCell].%s; }', pretty(var), pretty(var))
+    out.dec()
+    out('''
+
+   return NAN;
+}
+
+double ThisReaction::getValue(int iCell, int varHandle, double V) const
+{''', template)
+    out.inc()
+    for var in order(diffvars):
+        out('const double %s=state_[iCell].%s;',pretty(var),pretty(var))   
+    out('if (0) {}')
+    for var in order(diffvars|tracevars):
+        out('else if (varHandle == %s_handle)', pretty(var))
+        out('{')
+        out.inc()
+        model.printTarget(diffvars|set([V]),set([var])-diffvars,cprinter)
+        out('return %s;',pretty(var))
+        out.dec()
+        out('}')
+    out.dec()
+    out('''
+
+   return NAN;
 }
 
 void ThisReaction::getCheckpointInfo(vector<string>& fieldNames,
                                      vector<string>& fieldUnits) const
 {
-   fieldNames.resize(NUMVARS);
-   fieldUnits.resize(NUMVARS);
-   for (int ivar=0; ivar<NUMVARS; ivar++) 
-   {
-      fieldNames[ivar] = varNames[ivar];
-      fieldUnits[ivar] = varUnits[ivar];
-   }
+   fieldNames.clear();
+   fieldUnits.clear();''', template)
+    out.inc()
+    for var in order(diffvars):
+        out('fieldNames.push_back("%s");',pretty(var))
+        out('fieldUnits.push_back(getUnit("%s"));',pretty(var))
+    out.dec()
+    out('''
 }
 
 }''', template)
