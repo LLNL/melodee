@@ -665,7 +665,9 @@ double ThisReaction::getValue(int iCell, int varHandle, double V) const
         out('else if (varHandle == %s_handle)', pretty(var))
         out('{')
         out.inc()
-        model.printTarget(diffvars|set([V]),set([var])-diffvars,cprinter)
+        good=diffvars|set([V])|params
+        cprinter = CPrintVisitor(out, model.ssa, good)
+        model.printTarget(good,set([var])-params,cprinter)
         out('return %s;',pretty(var))
         out.dec()
         out('}')
