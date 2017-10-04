@@ -239,7 +239,9 @@ class Differentiator:
         if isinstance(ast, Choice):
             (thenVar, thenExpr) = self.diff(ast.thenVar,wrt)
             (elseVar, elseExpr) = self.diff(ast.elseVar,wrt)
-            if thenExpr.sympy == elseExpr.sympy:
+            if (not isinstance(thenExpr, Choice) and
+                not isinstance(elseExpr, Choice) and
+                thenExpr.sympy == elseExpr.sympy):
                 return self.cacheResult(var,wrt,resultVar,thenExpr)
             else:
                 resultAst = Choice(ast.ifVar,thenVar,elseVar,
@@ -252,7 +254,7 @@ class Differentiator:
             for dep in deps:
                 (diffVar,diffExpr) = self.diff(dep,wrt)
                 result=None
-                if not isinstance(diffExpr, Choice):
+                if not (isinstance(diffExpr, Choice) or diffExpr == None):
                     if diffExpr.sympy==self.zero.sympy:
                         result = dep
                     elif diffExpr.sympy==self.one.sympy:
