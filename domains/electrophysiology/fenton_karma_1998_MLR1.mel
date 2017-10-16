@@ -1,0 +1,84 @@
+/*
+ * <license>
+ * Copyright (c) 2016-2017, Lawrence Livermore National Security,
+ * LLC. Produced at the Lawrence Livermore National Laboratory. Written
+ * by Robert Blake <blake14@llnl.gov>.
+ *
+ * LLNL-CODE-720003.
+ * All rights reserved.
+ *
+ * This file is part of MELODEE. For details, see
+ * http://github.com/llnl/melodee.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "Licensee"); you
+ * may not use this file except in compliance with the License.  You may
+ * obtain a copy of the License at:
+ * 
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * permissions and limitations under the license.
+ * </license>
+ *
+ * Taken and adaped from
+ * https://models.physiomeproject.org/e/40/fenton_karma_1998_MLR1.cellml/view
+ *
+ */
+
+integrate time {ms};
+
+shared V {mV};
+shared V_init {mV};
+shared Iion {uA/uF};
+
+subsystem fenton_karma_1998_MLR1 {
+   diffvar v {1};
+   diffvar w {1};
+
+   provides V_init = -85;
+   V_fi {mV} = 15;
+   
+   u {1} = (V-V_init)/(V_fi-V_init);
+   
+   Cm {uF/cm^2} = 1;
+
+   u_c = 0.13;
+   p = ((u < u_c) ? 0 : 1);
+
+   u_v = 0;
+   q = ((u < u_v) ? 0 : 1);
+
+   tau_v1_minus {ms} = 18.2;
+   tau_v2_minus {ms} = 18.2;
+   tau_v_plus {ms} = 10;
+   tau_v_minus {ms} = (q*tau_v1_minus+(1-q)*tau_v2_minus);
+   v.init = 1;
+   v.diff = ((1-p)*(1-v)/tau_v_minus-p*v/tau_v_plus);
+
+   
+   g_fi_max {mS/cm^2} = 5.8;
+   tau_d {ms} = Cm/g_fi_max;
+   J_fi {1/ms} = -v*p*(1-u)*(u-u_c)/tau_d;
+
+   tau_w_minus {ms} = 80;
+   tau_w_plus {ms} = 1020;
+   w.init {1} = 1;
+   w.diff = ((1-p)*(1-w)/tau_w_minus-p*w/tau_w_plus);
+
+   k {1} = 10;
+   tau_si {ms} = 127;
+   u_csi {1} = 0.85;
+   J_si {1/ms} = -w*(1+tanh(k*(u-u_csi)))/(2*tau_si);
+   
+   
+   tau_0 {ms} = 12.5;
+   tau_r {ms} = 130;
+   J_so {1/ms} = (u*(1-p)/tau_0+p/tau_r);
+
+
+   provides Iion = (V_fi-V_init)*(J_fi+J_so+J_si);
+   
+}
