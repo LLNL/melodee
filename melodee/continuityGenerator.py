@@ -131,7 +131,7 @@ void cpu_advance_be1(REAL _t, REAL _t_end, REAL *_y_global, REAL *_y_global_temp
     for var in order(diffvars):
         out("REAL %s=_y_global[%d];", pretty(var), varCount[var]);
     good |= statevars
-    for var in order(params|coupled):
+    for var in order(params|inputs):
         out("REAL %s=_rpar_global[%d];", pretty(var), varCount[var]);
     good |= params
 
