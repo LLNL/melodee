@@ -30,6 +30,7 @@ setup(
       entry_points = {
           'console_scripts' : ['cardioidGenerator=melodee.cardioidGenerator:main',
                                'continuityGenerator=melodee.continuityGenerator:main',
+                               'chasteGenerator=melodee.chasteGenerator:main',
                                'cellmlConverter=melodee.cellmlConverter:main',
                                'matlabGenerator=melodee.matlabGenerator:main',
           ]
