@@ -22,10 +22,17 @@ Requirements:
 * PLY - for LR parsing
 * sympy - for symobolic expression manipulation
 
-To test simply, type
+To get started, create a virtual environment and install the package.
 
 ```bash
-./matlabGenerator.py modifiedModel,bclDefault HH.mel domains/electrophysiology/singleCell.mel
+virtualenv venv
+source venv/bin/activate
+pip install -e .
+```
+
+... then run the simulator
+```bash
+matlabGenerator modifiedModel,bclDefault HH.mel domains/electrophysiology/singleCell.mel
 ```
 
 -----------------
