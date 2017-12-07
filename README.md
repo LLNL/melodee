@@ -32,7 +32,7 @@ pip install -e .
 
 ... then run the simulator
 ```bash
-matlabGenerator modifiedModel,bclDefault HH.mel domains/electrophysiology/singleCell.mel
+melodee -g matlab -t modifiedModel -t bclDefault HH.mel domains/electrophysiology/singleCell.mel
 ```
 
 -----------------
