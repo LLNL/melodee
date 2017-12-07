@@ -39,7 +39,7 @@ from melodee.utility import order
 def pretty(symbol):
     return str(symbol)
 
-def generateCardioid(model, targetName, headerFile, sourceFile):
+def generateContinuity(model, targetName):
     template = {}
     template["target"] = targetName
 
@@ -98,7 +98,7 @@ def generateCardioid(model, targetName, headerFile, sourceFile):
     for var in order(coupled):
         fieldNumbers[var] = ii
         ii += 1
-    out = headerFile
+    out = utility.Indenter(open(targetName+".txt","w"))
     out("	component			%(target)s			StateVar", template)
     for var in order(coupled):
         out("voltage	spatially coupled	[['Field %d', '']]	d%s_dt = 0	StateVar			%s", fieldNumbers[var], pretty(var), pretty(var))
@@ -114,7 +114,7 @@ def generateCardioid(model, targetName, headerFile, sourceFile):
     out.dec()
     
 
-    out = sourceFile
+    out = utility.Indenter(open(targetName+".continuity.c","w"))
     out('''
 void cpu_advance_be1(REAL _t, REAL _t_end, REAL *_y_global, REAL *_y_global_temp, REAL *_rpar_global, int num_gauss_pts, int num_gpus, int gp_offset)
 {
@@ -150,29 +150,6 @@ void cpu_advance_be1(REAL _t, REAL _t_end, REAL *_y_global, REAL *_y_global_temp
 }
 ''' % template)
 
-def main():
-    import sys
-    
-    p = MelodeeParser()
-
-    sys.argv.pop(0)
-    target = sys.argv.pop(0)
-    models = {}
-    for filename in sys.argv:
-        p.parse(open(filename,"r").read())
-    originalTargets = target.split(",")
-    if len(originalTargets) > 1:
-        target = "_".join(originalTargets)
-        targetModel = ""
-        targetModel += "subsystem %s {\n" % target
-        for model in originalTargets:
-            targetModel += "   use %s;\n" % model
-        targetModel += "}\n"
-        p.parse(targetModel)
-        
-    generateCardioid(p.getModel(target), target,
-                     #utility.Indenter(sys.stdout),
-                     #utility.Indenter(sys.stdout),
-                     utility.Indenter(open(target+".txt","w")),
-                     utility.Indenter(open(target+".continuity.c","w")),
-    )
+generators = {
+    frozenset(["continuity"]): generateContinuity,
+}

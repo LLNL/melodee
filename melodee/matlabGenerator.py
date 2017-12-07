@@ -95,7 +95,7 @@ def numberVars(diffvars):
         count += 1
     return ret
 
-def generateMatlab(model, targetName, initFile, diffFile, traceFile):
+def generateMatlab(model, targetName):
     template = {}
     template["target"] = targetName
 
@@ -105,7 +105,7 @@ def generateMatlab(model, targetName, initFile, diffFile, traceFile):
     else:
         template["arglower"] = 0
 
-    out = initFile
+    out = utility.Indenter(open(targetName+"_init.m","w"))
     params = model.varsWithAttribute("param")
     printer = MatlabPrintVisitor(out,model.ssa,params)
     out("""
@@ -156,7 +156,7 @@ function [U_y_init, U_ordering, U_params] = %(target)s_init(varargin)
 end
 """ % template)
 
-    out = diffFile
+    out = utility.Indenter(open(targetName+".m","w"))
     printer = MatlabPrintVisitor(out,model.ssa,params)
     out("""
 function U_dydt = %(target)s(%(timename)s,U_diffvars,varargin)
@@ -200,7 +200,7 @@ end
     out("""
 end""" % template)
 
-    out = traceFile
+    out = utility.Indenter(open(targetName+"_trace.m","w"))
     printer = MatlabPrintVisitor(out, model.ssa, params)
     out("""
 function U_trace = %(target)s_trace(%(timename)s,U_diffvars,varargin)
@@ -235,39 +235,6 @@ end
     out("""
 end""" % template)
 
-def main():
-    import sys
-    import argparse
-    ap=argparse.ArgumentParser(description="Convert Melodee into Matlab functions")
-    ap.add_argument("target",
-                    help="Comma separated list of subsystems to generate",
-                    )
-    ap.add_argument("filenames", nargs=argparse.REMAINDER,
-                    help="Filenames containing all the targets",
-                    )
-    options=ap.parse_args()
-    target = options.target
-    filenames = options.filenames
-    
-    p = MelodeeParser()
-
-    models = {}
-    for filename in filenames:
-        p.parse(open(filename,"r").read())
-    originalTargets = target.split(",")
-    if len(originalTargets) > 1:
-        target = "_".join(originalTargets)
-        targetModel = ""
-        targetModel += "subsystem %s {\n" % target
-        for model in originalTargets:
-            targetModel += "   use %s;\n" % model
-        targetModel += "}\n"
-        p.parse(targetModel)
-        
-    generateMatlab(p.getModel(target), target,
-                   #utility.Indenter(sys.stdout),
-                   #utility.Indenter(sys.stdout),
-                   utility.Indenter(open(target+"_init.m","w")),
-                   utility.Indenter(open(target+".m","w")),
-                   utility.Indenter(open(target+"_trace.m","w")),
-    )
+generators = {
+    frozenset(["matlab"]): generateMatlab,
+}

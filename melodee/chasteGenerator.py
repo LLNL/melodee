@@ -39,7 +39,7 @@ from melodee.cardioidGenerator import repeat,MyCCodeSympyPrinter,CPrintVisitor
 def pretty(symbol):
     return str(symbol)
 
-def generateChaste(model, targetName, headerFile, sourceFile):
+def generateChaste(model, targetName):
     template = {}
     template["target"] = targetName
 
@@ -68,7 +68,7 @@ def generateChaste(model, targetName, headerFile, sourceFile):
         Cai = model.output("Cai")
         hasCai = True
     
-    out = headerFile
+    out = utility.Indenter(open(targetName+".hpp","w"))
     out('''
 #ifndef %(target)s_HPP_
 #define %(target)s_HPP_
@@ -200,8 +200,7 @@ inline void load_construct_data(
 
 ''', template)
 
-    out = sourceFile
-    
+    out = utility.Indenter(open(targetName+".cpp","w"))
     out(r'''
 #include "%(target)s.hpp"
 #include "OdeSystemInformation.hpp"
@@ -378,29 +377,6 @@ extern "C" {
 }
 ''', template)
 
-def main():
-    import sys
-    
-    p = MelodeeParser()
-
-    sys.argv.pop(0)
-    target = sys.argv.pop(0)
-    models = {}
-    for filename in sys.argv:
-        p.parse(open(filename,"r").read())
-    originalTargets = target.split(",")
-    if len(originalTargets) > 1:
-        target = "_".join(originalTargets)
-        targetModel = ""
-        targetModel += "subsystem %s {\n" % target
-        for model in originalTargets:
-            targetModel += "   use %s;\n" % model
-        targetModel += "}\n"
-        p.parse(targetModel)
-        
-    generateChaste(p.getModel(target), target,
-                   #utility.Indenter(sys.stdout),
-                   #utility.Indenter(sys.stdout),
-                   utility.Indenter(open(target+".hpp","w"), "    "),
-                   utility.Indenter(open(target+".cpp","w"), "    "),
-    )
+generators = {
+    frozenset(["chaste"]) : generateChaste
+}

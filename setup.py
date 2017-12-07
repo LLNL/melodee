@@ -28,11 +28,8 @@ setup(
       ],
       zip_safe=False,
       entry_points = {
-          'console_scripts' : ['cardioidGenerator=melodee.cardioidGenerator:main',
-                               'continuityGenerator=melodee.continuityGenerator:main',
-                               'chasteGenerator=melodee.chasteGenerator:main',
-                               'cellmlConverter=melodee.cellmlConverter:main',
-                               'matlabGenerator=melodee.matlabGenerator:main',
+          'console_scripts' : ['melodee=melodee.main:main',
+                               'cellml2melode=melodee.cellmlConverter:main',
           ]
       },
 )

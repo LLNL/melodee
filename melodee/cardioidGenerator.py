@@ -151,7 +151,7 @@ class InterpolatePrintVisitor:
         else:
             self.other.equationPrint(lhs,rhs)
 
-def generateCardioid(model, targetName, headerFile, sourceFile):
+def generateCardioid(model, targetName):
     template = {}
     template["target"] = targetName
 
@@ -231,7 +231,7 @@ def generateCardioid(model, targetName, headerFile, sourceFile):
         computeTargets)
     constants = model.allExcluding(approxvars,statevars) & computeAllDepend
 
-    out = headerFile
+    out = utility.Indenter(open(targetName+".hh","w"))
     out('''
 #include "Reaction.hh"
 #include "Interpolation.hh"
@@ -309,8 +309,7 @@ namespace %(target)s
 
 ''', template)
 
-    out = sourceFile
-    
+    out = utility.Indenter(open(targetName+".cc","w"))
     out('''
 /**
 
@@ -692,29 +691,6 @@ void ThisReaction::getCheckpointInfo(vector<string>& fieldNames,
 
 }''', template)
 
-def main():
-    import sys
-    
-    p = MelodeeParser()
-
-    sys.argv.pop(0)
-    target = sys.argv.pop(0)
-    models = {}
-    for filename in sys.argv:
-        p.parse(open(filename,"r").read())
-    originalTargets = target.split(",")
-    if len(originalTargets) > 1:
-        target = "_".join(originalTargets)
-        targetModel = ""
-        targetModel += "subsystem %s {\n" % target
-        for model in originalTargets:
-            targetModel += "   use %s;\n" % model
-        targetModel += "}\n"
-        p.parse(targetModel)
-        
-    generateCardioid(p.getModel(target), target,
-                     #utility.Indenter(sys.stdout),
-                     #utility.Indenter(sys.stdout),
-                     utility.Indenter(open(target+".hh","w")),
-                     utility.Indenter(open(target+".cc","w")),
-    )
+generators = {
+    frozenset(["cardioid"]) : generateCardioid
+}
