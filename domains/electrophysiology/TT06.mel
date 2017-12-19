@@ -33,6 +33,8 @@ shared V_init {mV};
 subsystem TT06 {
    provides V_init = -86.709;
 
+   provides celltype {enum(ENDO,MID,EPI)} = ENDO;
+
    provides Cm {uF} = 0.185;
    provides F {C/mol} = 96485.3415;
    provides R {J/K/kmol} = 8314.472;
@@ -47,7 +49,7 @@ subsystem TT06 {
       provides diffvar Na_i;
       Na_i.init = 10.355;
       /* Na_i.diff = -1*(i_Na+i_b_Na+3*i_NaK+3*i_NaCa)/1*V_c*F*Cm; */
-      Na_i.diff = i_Naitot*Cm/V_c/F*factor_fix;
+      Na_i.diff = -i_Naitot*Cm/V_c/F*factor_fix;
       provides Na_o = 140;
    }
 
@@ -168,7 +170,11 @@ subsystem TT06 {
       }
       P_kna = 0.03;
       E_Ks = R*T/F*log((K_o+P_kna*Na_o)/(K_i+P_kna*Na_i));
-      g_Ks = 0.392;
+      if (celltype == MID) {
+        g_Ks = 0.098;
+      } else {
+        g_Ks = 0.392;
+      }
       i_Ks = g_Ks*pow(Xs,2)*(V-E_Ks);
       provides accum i_Kitot += i_Ks;
    }
@@ -191,12 +197,21 @@ subsystem TT06 {
       }
       subsystem transient_outward_current_s_gate {
          provides diffvar @gate s;
-         s_inf = 1/(1+exp((V+28)/5));
-         tau_s = (1000*exp(-pow((V+67),2)/1000)+8);
+         if (celltype == ENDO) {
+           s_inf = 1/(1+exp((V+28)/5));
+           tau_s = 1000*exp(-pow(V+67,2)/1000)+8;
+         } else {
+           s_inf = 1/(1+exp((V+20)/5));
+           tau_s = 85*exp(-pow(V+45,2)/320)+5/(1+exp((V-20)/5))+3;
+         }
          s.init = 0.3212;
          s.diff = (s_inf-s)/tau_s;
       }
-      g_to = 0.073;
+      if (celltype == ENDO) {
+        g_to = 0.073;
+      } else {
+        g_to = 0.294;
+      }
       i_to = g_to*r*s*(V-E_K);
       provides accum i_Kitot += i_to;
    }
