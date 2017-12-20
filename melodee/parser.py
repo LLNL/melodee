@@ -683,12 +683,13 @@ def consolidateSystem(timeUnit, rootEncap, connections):
             def getList(self, encap, symbolList, tupName):
                 return [self.get(encap, oldSym, tupName) for oldSym in symbolList]
 
+        orderedEncaps = sorted(nameFromEncap.items(), key=lambda x: x[1])
 
         #build the SSA
         convertedInstructions = []
         symbolMap = SymbolMapping()
         accumsFromJunction = {}
-        for (encap,tupName) in nameFromEncap.items():
+        for (encap,tupName) in orderedEncaps:
             subsystem = encap.subsystem
             for (name,port) in encap.ports.items():
                 junction = connections.junctionFromPort(port)
@@ -745,7 +746,7 @@ def consolidateSystem(timeUnit, rootEncap, connections):
         self.time = timeSym
 
         #get the diffvars
-        for (encap,tupName) in nameFromEncap.items():
+        for (encap,tupName) in orderedEncaps:
             subsystem = encap.subsystem
             appendAfter = {}
             for name in subsystem.diffvars:
@@ -787,7 +788,7 @@ def consolidateSystem(timeUnit, rootEncap, connections):
                 if converted in appendAfter:
                     convertedInstructions.append(appendAfter[converted])
 
-        for (encap,tupName) in nameFromEncap.items():
+        for (encap,tupName) in orderedEncaps:
             subsystem = encap.subsystem
             for (name,thisAttrMap) in subsystem.attributeMap.items():
                 oldSym = subsystem.getVar(name)
