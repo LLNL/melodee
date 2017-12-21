@@ -46,12 +46,14 @@ class MyCCodeSympyPrinter(C99CodePrinter):
             return 1
         elif expr.exp == 0.5:
             return 'sqrt(%s)' % self._print(expr.base)
+        elif expr.exp == -1:
+            return "1.0/"+self.parenthesize(expr.base,PREC)
+        elif expr.exp == 1:
+            return self.parenthesize(expr.base,PREC)
         elif expr.exp.is_constant and int(expr.exp) == expr.exp:
-            result = self.parenthesize(expr.base,PREC)
-            if expr.exp > 0:
-                return "*".join(repeat(result, int(expr.exp)))
-            else:
-                return "1.0/"+"/".join(repeat(result, -int(expr.exp)))
+            assert(expr.exp > 0)
+            print expr.base,expr.exp
+            return "(" + "*".join(repeat(self.parenthesize(expr.base,PREC),int(expr.exp)))+ ")"
         return 'pow(%s, %s)' % (self._print(expr.base),
                                 self._print(expr.exp))
     def _print_Relational(self,expr):
