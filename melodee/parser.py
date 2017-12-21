@@ -1707,7 +1707,7 @@ class InternalMelodeeParser:
         p[0] = p[1]
     def p_declList_multiple(self, p):
         '''declList : declList ',' declItem '''
-        p[0] = p[1] + p[2]
+        p[0] = p[1] + p[3]
     def p_declItem_single(self, p):
         '''declItem : unitDecl'''
         p[0] = [p[1]]
