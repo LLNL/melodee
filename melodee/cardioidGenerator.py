@@ -53,7 +53,7 @@ class MyCCodeSympyPrinter(C99CodePrinter):
             if expr.exp > 0:
                 return "(" + "*".join(repeat(base,int(expr.exp))) + ")"
             else:
-                return "(1.0/" + "/".join(repeat(base,int(expr.exp))) + ")"
+                return "(1.0/" + "/".join(repeat(base,-int(expr.exp))) + ")"
         return 'pow(%s, %s)' % (self._print(expr.base),
                                 self._print(expr.exp))
     def _print_Relational(self,expr):
