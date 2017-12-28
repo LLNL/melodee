@@ -144,8 +144,8 @@ subsystem TT06 {
    subsystem potassium_pump_current {
       g_pK = 0.0146;
       //@nointerp
-      i_p_K_term = 1+exp((25-V)/5.98);
-      i_p_K = g_pK*VEK/i_p_K_term;
+      i_p_K_term = 1/(1+exp((25-V)/5.98));
+      i_p_K = g_pK*VEK*i_p_K_term;
       provides accum i_Kitot += i_p_K;
    }
 
