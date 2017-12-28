@@ -33,7 +33,7 @@ shared V_init {mV};
 subsystem TT06 {
 
    @interp(-100,100,1e-2) V;
-   provides V_init = -86.709;
+   provides V_init = -83;
 
    provides celltype {enum(ENDO,MID,EPI)} = ENDO;
 
@@ -90,20 +90,32 @@ subsystem TT06 {
       shared m {1};
       subsystem fast_sodium_current_h_gate {
          provides diffvar @gate h;
-         alpha_h = ((V < -40) ? 0.057*exp(-(V+80)/6.8) : 0);
-         beta_h = ((V < -40) ? (2.7*exp(0.079*V)+310000*exp(0.3485*V)) : 0.77/(0.13*(1+exp((V+10.66)/-11.1))));
+         //@nointerp alpha_h,beta_h;
+         if (V < -40) {
+            alpha_h = 0.057*exp(-(V+80)/6.8);
+            beta_h = (2.7*exp(0.079*V)+310000*exp(0.3485*V));
+         } else {
+            alpha_h = 0;
+            beta_h = 0.77/(0.13*(1+exp((V+10.66)/-11.1)));
+         }
          h_inf = 1/(pow((1+exp((V+71.55)/7.43)),2));
          tau_h = 1/(alpha_h+beta_h);
-         h.init = 0.7573;
+         h.init = 0.55;
          h.diff = (h_inf-h)/tau_h;
       }
       subsystem fast_sodium_current_j_gate {
          provides diffvar @gate j;
-         alpha_j = ((V < -40) ? (-25428*exp(0.2444*V)-6.948e-6*exp(-0.04391*V))*(V+37.78)/1/(1+exp(0.311*(V+79.23))) : 0);
-         beta_j = ((V < -40) ? 0.02424*exp(-0.01052*V)/(1+exp(-0.1378*(V+40.14))) : 0.6*exp(0.057*V)/(1+exp(-0.1*(V+32))));
+         //@nointerp alpha_j,beta_j;
+         if (V < -40) {
+            alpha_j = (-25428*exp(0.2444*V)-6.948e-6*exp(-0.04391*V))*(V+37.78)/1/(1+exp(0.311*(V+79.23)));
+            beta_j = 0.02424*exp(-0.01052*V)/(1+exp(-0.1378*(V+40.14)));
+         } else {
+            alpha_j = 0;
+            beta_j = 0.6*exp(0.057*V)/(1+exp(-0.1*(V+32)));
+         }
          j_inf = 1/(pow((1+exp((V+71.55)/7.43)),2));
          tau_j = 1/(alpha_j+beta_j);
-         j.init = 0.7225;
+         j.init = 0.66;
          j.diff = (j_inf-j)/tau_j;
       }
       subsystem fast_sodium_current_m_gate {
@@ -131,6 +143,7 @@ subsystem TT06 {
    
    subsystem potassium_pump_current {
       g_pK = 0.0146;
+      //@nointerp
       i_p_K_term = 1+exp((25-V)/5.98);
       i_p_K = g_pK*VEK/i_p_K_term;
       provides accum i_Kitot += i_p_K;
@@ -209,7 +222,7 @@ subsystem TT06 {
            s_inf = 1/(1+exp((V+20)/5));
            tau_s = 85*exp(-pow(V+45,2)/320)+5/(1+exp((V-20)/5))+3;
          }
-         s.init = 0.3212;
+         s.init = 0.6012;
          s.diff = (s_inf-s)/tau_s;
       }
       if (celltype == ENDO) {
@@ -265,7 +278,7 @@ subsystem TT06 {
             provides diffvar @gate f;
             f_inf = 1/(1+exp((V+20)/7));
             tau_f = (1102.5*exp(-pow((V+27),2)/225)+200/(1+exp((13-V)/10))+180/(1+exp((V+30)/10))+20);
-            f.init = 0.8009;
+            f.init = 0.9609;
             f.diff = (f_inf-f)/tau_f;
          }
          g_CaL = 0.0000398;
@@ -328,17 +341,17 @@ subsystem TT06 {
       i_up = Vmax_up/(1+pow(K_up,2)/pow(Ca_i,2));
       i_xfer = V_xfer*(Ca_ss-Ca_i);
       kcasr = (max_sr-(max_sr-min_sr)/(1+pow(EC/Ca_SR,2)));
-      Ca_i.init = 0.00013;
+      Ca_i.init = 0.00002;
       Ca_i.diff = Ca_i_bufc*(((i_leak-i_up)*V_sr/V_c+i_xfer)-1*((i_b_Ca+i_p_Ca)-2*i_NaCa)*Cm/(2*1*V_c*F));
       k1 = k1_prime/kcasr;
       k2 = k2_prime*kcasr;
       O = k1*pow(Ca_ss,2)*R_prime/(k3+k1*pow(Ca_ss,2));
-      R_prime.init = 0.9068;
+      R_prime.init = 0.9868;
       R_prime.diff = (-k2*Ca_ss*R_prime+k4*(1-R_prime));
       i_rel = V_rel*O*(Ca_SR-Ca_ss);
-      Ca_SR.init = 3.715;
+      Ca_SR.init = 3.155;
       Ca_SR.diff = Ca_sr_bufsr*(i_up-(i_rel+i_leak));
-      Ca_ss.init = 0.00036;
+      Ca_ss.init = 0.00017;
       Ca_ss.diff = Ca_ss_bufss*((-1*i_CaL*Cm/(2*1*V_ss*F)+i_rel*V_sr/V_ss)-i_xfer*V_c/V_ss);
    }
 

@@ -163,6 +163,7 @@ def generateCardioid(model, targetName):
     gates = model.varsWithAttribute("gate") & diffvars
     polyfits = model.varsWithAttribute("interp")
     tracevars = model.varsWithAttribute("trace")
+    nointerps = model.varsWithAttribute("nointerp")
     
     V = model.input("V")
     V_init = model.output("V_init")
@@ -206,7 +207,7 @@ def generateCardioid(model, targetName):
     allfits = set()
     for fit in polyfits:
         good = approxvars | set([fit])
-        dependsOnlyOnFit = model.allExcluding(good, statevars-good)
+        dependsOnlyOnFit = model.allExcluding(good, (statevars-good)|nointerps)
         polyfitCandidates = (dependsOnlyOnFit & computeAllDepend) - constants
 
         expensiveFit = expensiveVars & polyfitCandidates
