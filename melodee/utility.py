@@ -23,9 +23,11 @@
 # permissions and limitations under the license.
 #### </license> #### 
 
+from __future__ import print_function
 import sys
 import re
 import sympy
+
 
 class Indenter:
     def __init__(self, fff=sys.stdout, indentString="   "):
@@ -36,23 +38,23 @@ class Indenter:
     def __call__(self, string, *args, **kwargs):
         initialstrip = string.lstrip('\n')
         if not initialstrip:
-            print >>self.outfile, string,
+            print(string, end='', file=self.outfile)
             return
         indentString = self.indent*self.indentAmount
         for line in initialstrip.split('\n'):
             outline = indentString+line
             if line == "":
-                print >>self.outfile, "\n",
+                print("\n", end='', file=self.outfile)
             elif kwargs:
-                print >>self.outfile, (outline % kwargs)
+                print((outline % kwargs), file=self.outfile)
             elif len(args) == 1 and type(args[0]) == dict:
-                print >>self.outfile, (outline % args[0])
+                print((outline % args[0]), file=self.outfile)
             elif len(args) == 1:
-                print >>self.outfile, (outline % args[0])
+                print((outline % args[0]), file=self.outfile)
             elif len(args) == 0:
-                print >>self.outfile, outline
+                print(outline, file=self.outfile)
             else:
-                print >>self.outfile, (outline % args)
+                print((outline % args), file=self.outfile)
 
     def inc(self, indentAmount=1):
         self.indentAmount += indentAmount
@@ -70,4 +72,4 @@ def order(iterable):
 
 def unzip(lll):
     """Does the opposite of zip"""
-    return zip(*lll)
+    return list(zip(*lll))

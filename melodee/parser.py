@@ -302,13 +302,13 @@ class Differentiator:
 class XXXSyntaxError(SyntaxError):
     def __init__(self, text):
         self.text = text
-        print text
+        print(text)
     def __str__(self):
         return self.text
 
 class Symbol(sympy.symbol.Dummy):
-    def __init__(self, *args, **kwargs):
-        sympy.symbol.Dummy.__init__(self, *args, **kwargs)
+    def __new__(cls, *args, **kwargs):
+        return super(Symbol,cls).__new__(cls,*args,**kwargs)
     def __str__(self):
         ret = sympy.symbol.Dummy.__str__(self)
         #return ret[1:]
@@ -317,7 +317,7 @@ class Symbol(sympy.symbol.Dummy):
 class SSA(dict):
     def __setitem__(self, key, value):
         if key in self:
-            print key, value
+            print(key, value)
             raise MultipleSymbolAssignment(key)
         dict.__setitem__(self,key,value)
     def dependencies(self, symbolMaybeList):
@@ -433,7 +433,7 @@ class Scope:
     def hasSymbol(self, name):
         try:
             self.getSymbol(name)
-        except KeyError,e:
+        except KeyError as e:
             return False
         return True
     def getUnit(self, name):
@@ -446,7 +446,7 @@ class Scope:
     def hasUnit(self,name):
         try:
             self.getUnit(name)
-        except KeyError,e:
+        except KeyError as e:
             return False
         return True
     def setSymbol(self, name, symbol):
@@ -625,12 +625,12 @@ def consolidateSystem(timeUnit, rootEncap, connections):
         nameFromEncap={}
         def nameAllEncaps(encap, myName=(), retval=None):
             retval[encap] = myName
-            for (postfix, child) in encap.children.items():
+            for (postfix, child) in list(encap.children.items()):
                 nameAllEncaps(child, myName+(postfix,), retval)
             return retval
         nameFromEncap = nameAllEncaps(rootEncap, (), {})
 
-        allEncap = nameFromEncap.keys()
+        allEncap = list(nameFromEncap.keys())
 
         #go ahead and name all the junctions, get their symbols
         symbolFromJunction = {}
@@ -683,7 +683,7 @@ def consolidateSystem(timeUnit, rootEncap, connections):
             def getList(self, encap, symbolList, tupName):
                 return [self.get(encap, oldSym, tupName) for oldSym in symbolList]
 
-        orderedEncaps = sorted(nameFromEncap.items(), key=lambda x: x[1])
+        orderedEncaps = sorted(list(nameFromEncap.items()), key=lambda x: x[1])
 
         #build the SSA
         convertedInstructions = []
@@ -840,9 +840,9 @@ def consolidateSystem(timeUnit, rootEncap, connections):
                     self.instructions.append(inst)
 
             if not removedThisIter:
-                print undefinedInstructions
-                print len(undefinedInstructions)
-                print definedSymbols
+                print(undefinedInstructions)
+                print(len(undefinedInstructions))
+                print(definedSymbols)
                 assert(removedThisIter)
             #print "---------------------------------------------------------------"
 
@@ -2134,15 +2134,15 @@ class InternalMelodeeParser:
 
     def p_statementRecovery(self,p):
         '''subSystemStatement : error ';' '''
-        print "moving on from syntax error on line number "+str(p.lineno(2))
+        print("moving on from syntax error on line number "+str(p.lineno(2)))
     def p_subsystemRecovery(self,p):
         '''subSystemDefinition : subSystemBegin error '}' '''
-        print "moving on from syntax error on line number "+str(p.lineno(3))
+        print("moving on from syntax error on line number "+str(p.lineno(3)))
         self.scopeStack.pop()
         thisEncapsulation = self.encapsulationStack.pop()
     def p_useRecovery(self,p):
         '''useBlockStatement : error ';' '''
-        print "moving on from syntax error on line number "+str(p.lineno(3))
+        print("moving on from syntax error on line number "+str(p.lineno(3)))
     #def p_error(self,p):
     #    if p:
     #        print "SyntaxError on line number "+str(self.lexer.lineno)+" at token", p.type, p.value
@@ -2165,11 +2165,11 @@ and && or || not ! 0 2.0 .3 40. 5e+6 if myID */* bljsadfj */ */
         tok = p.lexer.token()
         if not tok:
             break
-        print tok
+        print(tok)
 
     p = InternalMelodeeParser(start="unitExpr")
-    print p.parse("mV/ms")
-    print p.parse("uA/uF")
+    print(p.parse("mV/ms"))
+    print(p.parse("uA/uF"))
 
     p = InternalMelodeeParser(start="realExpr")
     p.p_subSystemBegin([None, 'subsystem', "testing", '{'])
@@ -2181,17 +2181,17 @@ and && or || not ! 0 2.0 .3 40. 5e+6 if myID */* bljsadfj */ */
     p.currentScope().setUnit("b", p.si.get("unitless"))
     p.currentScope().setUnit("c", p.si.get("ms"))
     p.currentScope().setUnit("d", p.si.get("s"))
-    print p.parse("a+b/c+d")
-    print p.parse("a+(b/c)+d")
-    print p.parse("a+b")
-    print p.parse("(a+b)")
-    print p.parse("a")
-    print p.parse("(a)")
-    print p.parse("((a))")
-    print p.parse("((a+b))/((c+d))")
-    print p.parse("1 {ms}+ c")
-    print p.parse("convert(1 {ms}, s)+ d {s}")
-    print p.parse("a == b")
+    print(p.parse("a+b/c+d"))
+    print(p.parse("a+(b/c)+d"))
+    print(p.parse("a+b"))
+    print(p.parse("(a+b)"))
+    print(p.parse("a"))
+    print(p.parse("(a)"))
+    print(p.parse("((a))"))
+    print(p.parse("((a+b))/((c+d))"))
+    print(p.parse("1 {ms}+ c"))
+    print(p.parse("convert(1 {ms}, s)+ d {s}"))
+    print(p.parse("a == b"))
 
     HH = '''
 integrate time {ms};
@@ -2304,4 +2304,4 @@ subsystem modifiedModel {
     p = InternalMelodeeParser(start="topLevelStatementsOpt")
     p.parse(HH)
     model = p.getModel("modifiedModel")
-    print strifyInstructions(model.instructions, model.ssa)
+    print(strifyInstructions(model.instructions, model.ssa))

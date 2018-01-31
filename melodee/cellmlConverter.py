@@ -77,7 +77,7 @@ class Equation:
 
 def parseEquation(eqnElement, varToUnit):
     if eqnElement[0].tag != "eq":
-        print ET.tostring(eqnElement)
+        print(ET.tostring(eqnElement))
     assert(eqnElement[0].tag == "eq")
     lhsElement = eqnElement[1]
     rhsElement = eqnElement[2]
@@ -223,8 +223,8 @@ def parseRhs(rhsElement):
             return (functionOps[op]+"("+",".join(texts)+")",
                     allDependencies)
         else:
-            print rhsElement
-            print op
+            print(rhsElement)
+            print(op)
             assert(False)
     elif rhsElement.tag == "piecewise":
         #grab all the pieces
@@ -246,7 +246,7 @@ def parseRhs(rhsElement):
             allDepend |= thisIfClause[2]
         return (allText, allDepend)
     else:
-        print rhsElement.tag
+        print(rhsElement.tag)
         assert(False)
 
 
@@ -301,7 +301,7 @@ class Component:
         self.subComponents = {}
 
     def lookupUnit(self, var):
-        if self.varToUnit.has_key(var):
+        if var in self.varToUnit:
             return printUnit(self.varToUnit[var])
         for subComponent in self.subComponents.values():
             possibleAnswer = subComponent.lookupUnit(var)
@@ -398,19 +398,19 @@ class Component:
                 subComponent.toCode(out,declared)
             debug = False
             if debug:
-                print self.eqns.keys()
-                print self.outputs
-                print self.outputs - defined
-                print good
-                print "-----"
-                print invoked
-                print set(self.subComponents.keys()) - invoked
+                print(list(self.eqns.keys()))
+                print(self.outputs)
+                print(self.outputs - defined)
+                print(good)
+                print("-----")
+                print(invoked)
+                print(set(self.subComponents.keys()) - invoked)
                 for componentName in set(self.subComponents.keys()) - invoked:
-                    print "====="
+                    print("=====")
                     component = self.subComponents[componentName]
-                    print component.name
-                    print component.inputs - good
-                    print component.outputs - good
+                    print(component.name)
+                    print(component.inputs - good)
+                    print(component.outputs - good)
                 assert(False)
 
         out.dec()
@@ -505,12 +505,12 @@ def parseUnits(units, unitElements):
     while moreUnitsToParse:
         moreUnitsToParse = False
         for unitElement in set(unitElements)-baseUnitElements:
-            if units.has_key(unitElement.get("name")):
+            if unitElement.get("name") in units:
                 continue
             #are all the subunits for this guy defined?
             undefinedSubunits = False
             for subUnitElement in unitElement.findall("unit"):
-                if not units.has_key(subUnitElement.get("units")):
+                if subUnitElement.get("units") not in units:
                     undefinedSubunits = True
                     break
             if undefinedSubunits:

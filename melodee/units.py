@@ -38,7 +38,7 @@ class Unit:
             return False
         for (base,power) in self.bases.items():
             if power != 0:
-                if not other.bases.has_key(base):
+                if base not in other.bases:
                     return False
                 elif other.bases[base] != power:
                     return False
@@ -62,6 +62,8 @@ class Unit:
         ret.scale += other.scale
         return ret
     def __div__(self, other):
+        return self.__truediv__(other)
+    def __truediv__(self, other):
         assert(self.system == other.system)
         ret = self.copy()
         for (base,power) in other.bases.items():
@@ -263,6 +265,6 @@ class Si(UnitSystem):
 if __name__=='__main__':
     si  = Si()
     assert (si.mV/si.ms).isCompatibleWith(si.uA/si.uF)
-    print (si.mV/si.ms).convertTo(si.uA/si.uF)-1
+    print((si.mV/si.ms).convertTo(si.uA/si.uF)-1)
     assert (si.mV/si.ms).convertTo(si.uA/si.uF) == 1
     

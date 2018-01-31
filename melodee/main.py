@@ -25,7 +25,8 @@ def main():
         if os.path.samefile(modulePath,__file__):
             continue
         moduleName = os.path.split(modulePath)[-1][:-3]
-        melodee = __import__("melodee."+moduleName, globals(), locals(), [], -1)
+        importlib.import_module("melodee."+moduleName)
+        #melodee = __import__("melodee."+moduleName, globals(), locals(), [], -1)
         module = eval("melodee."+moduleName)
         for (tags, function) in module.generators.items():
             genFactory.register(function, tags)
