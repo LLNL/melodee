@@ -31,6 +31,7 @@ import ply.lex as lex
 import ply.yacc as yacc
 
 from melodee import units
+from melodee.utility import order
 
 ###################################################################
 #these parts make up the external API
@@ -1189,7 +1190,7 @@ class InternalMelodeeParser:
         ifSymbol = symbol
         
         #iterate over local symbols
-        for var in set(thenScope.symbols.keys()) | set(elseScope.symbols.keys()):
+        for var in order(set(thenScope.symbols.keys()) | set(elseScope.symbols.keys())):
             if not thenScope.hasSymbol(var) or not elseScope.hasSymbol(var):
                 continue
             #make sure the units match
