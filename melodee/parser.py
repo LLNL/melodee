@@ -622,6 +622,10 @@ class Encapsulation:
 def fullName(tupleName):
     return ":".join(tupleName)
 
+def itemsOrderedByValue(myDict):
+    return sorted(list(myDict.items()), key=lambda x: x[1])
+def itemsOrderedByKey(myDict):
+    return sorted(list(myDict.items()), key=lambda x: x[0])
 
 def consolidateSystem(timeUnit, rootEncap, connections):
         self = ConsolidatedSystem()
@@ -686,13 +690,11 @@ def consolidateSystem(timeUnit, rootEncap, connections):
             def getList(self, encap, symbolList, tupName):
                 return [self.get(encap, oldSym, tupName) for oldSym in symbolList]
 
-        orderedEncaps = sorted(list(nameFromEncap.items()), key=lambda x: x[1])
-
         #build the SSA
         convertedInstructions = []
         symbolMap = SymbolMapping()
         accumsFromJunction = {}
-        for (encap,tupName) in orderedEncaps:
+        for (encap,tupName) in itemsOrderedByValue(nameFromEncap):
             subsystem = encap.subsystem
             for (name,port) in encap.ports.items():
                 junction = connections.junctionFromPort(port)
@@ -737,7 +739,7 @@ def consolidateSystem(timeUnit, rootEncap, connections):
             self.ssa[newSymbol] = AST(sympy.Add(*accums), ASTUnit(junction.rawUnit,False))
 
         #get the inputs/outputs
-        for (name,junction) in rootEncap.junctions.items():
+        for (name,junction) in itemsOrderedByKey(rootEncap.junctions):
             if rootEncap.isExternal(junction):
                 symbol = symbolFromJunction[junction]
                 if junction in isAssign or junction in isAccum:
@@ -749,7 +751,7 @@ def consolidateSystem(timeUnit, rootEncap, connections):
         self.time = timeSym
 
         #get the diffvars
-        for (encap,tupName) in orderedEncaps:
+        for (encap,tupName) in itemsOrderedByValue(nameFromEncap):
             subsystem = encap.subsystem
             appendAfter = {}
             for name in subsystem.diffvars:
@@ -791,7 +793,7 @@ def consolidateSystem(timeUnit, rootEncap, connections):
                 if converted in appendAfter:
                     convertedInstructions.append(appendAfter[converted])
 
-        for (encap,tupName) in orderedEncaps:
+        for (encap,tupName) in itemsOrderedByValue(nameFromEncap):
             subsystem = encap.subsystem
             for (name,thisAttrMap) in subsystem.attributeMap.items():
                 oldSym = subsystem.getVar(name)
