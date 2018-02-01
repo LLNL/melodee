@@ -98,9 +98,21 @@ def parseEquation(eqnElement, varToUnit):
     unit = varToUnit[lhs]
     return Equation(lhs, rhs, unit, depend, isDiff)
 
+def checkParen(sss):
+    count=0
+    for char in sss:
+        if char == '(':
+            count += 1
+        if char == ')':
+            count -= 1
+            if count < 0:
+                return False
+    return count==0
+        
+
 def protectDivide(text):
     ret = text
-    if not (ret[0] == '(' and ret[-1] == ')'):
+    if not (ret[0] == '(' and ret[-1] == ')' and checkParen(ret[1:-1])):
         unitless = re.sub(r'\{.*?\}','',ret)
         if unitless.count('*') or unitless.count('/'):
             ret = '(' + ret + ')'
