@@ -627,8 +627,9 @@ def itemsOrderedByValue(myDict):
 def itemsOrderedByKey(myDict):
     return sorted(list(myDict.items()), key=lambda x: x[0])
 
-def consolidateSystem(timeUnit, rootEncap, connections):
+def consolidateSystem(timeUnit, rootEncap, connections,si):
         self = ConsolidatedSystem()
+        self.si = si
         nameFromEncap={}
         def nameAllEncaps(encap, myName=(), retval=None):
             retval[encap] = myName
@@ -959,7 +960,7 @@ class InternalMelodeeParser:
     def getModel(self, name):
         rootEncap = self.encapsulationStack[0].children[name]
         timeUnit = self.timeUnitFromEncapName[name]
-        return consolidateSystem(timeUnit,rootEncap,self.connections)
+        return consolidateSystem(timeUnit,rootEncap,self.connections,self.si)
         
     def clearEnvironment(self):
         self.timeVar = None
