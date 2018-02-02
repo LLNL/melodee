@@ -477,7 +477,7 @@ void    initialize_sv_%(target)s( ION_IF *IF, GlobalData_t **impdata )
     for var in order(modvars):
         out("%s_ext[__i] = %s;",var,var)
     out("//Save voltage")
-    out("%s_ext[__i] = %s",V,V);
+    out("%s_ext[__i] = %s;",V,V);
 
     out.dec(2)
     out('''
@@ -501,7 +501,7 @@ GLOBAL void compute_%(target)s(int start, int end, ION_IF *IF, GlobalData_t **im
   %(target)s_Params *p  = (%(target)s_Params *)IF->params;
   %(target)s_state *sv_base = (%(target)s_state *)IF->sv_tab.y;
 
-  GlobalData_t t = IF->tstp.cnt*dt;
+  GlobalData_t t = IF->tstp.cnt*_dt;
 
 ''', template)
     printParamConst(out,paramvars-nodevars)
@@ -532,7 +532,7 @@ GLOBAL void compute_%(target)s(int start, int end, ION_IF *IF, GlobalData_t **im
     
     out("//Read in the input vars")
     for var in order(reqvars):
-        out("GlobalData_t* %s = %s_ext[__i];",var, var)
+        out("GlobalData_t %s = %s_ext[__i];",var, var)
     good |= reqvars
         
     out("//Get the definition of statevars")
@@ -565,7 +565,7 @@ GLOBAL void compute_%(target)s(int start, int end, ION_IF *IF, GlobalData_t **im
 
     out('//Finish the update', template)
     for var in order(fevars):
-        out("%s += %s*dt;",stateName(var,statevars),diffvarUpdate[var])
+        out("%s += %s*_dt;",stateName(var,statevars),diffvarUpdate[var])
     for var in order(rushvars):
         out("%s = %s;",stateName(var,statevars),rushTargets[var])
     out('//Change the units of external variables as appropriate.', template)    
@@ -612,7 +612,7 @@ void trace_%(target)s(ION_IF* IF, int node, FILE* file, GlobalData_t** impdata)
   %(target)s_state *sv = sv_base+node;
   int __i = node;
 
-  GlobalData_t t = IF->tstp.cnt*dt;
+  GlobalData_t t = IF->tstp.cnt*_dt;
 
 ''', template)
     out.inc()
