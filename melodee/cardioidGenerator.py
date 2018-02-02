@@ -65,35 +65,35 @@ class MyCCodeSympyPrinter(C99CodePrinter):
         else:
             return super(MyCCodeSympyPrinter, self)._print_Relational(expr)
 
-def pretty(symbol):
-    return str(symbol)
-
 class CPrintVisitor:
     def __init__(self, out, ssa, declared, decltype="double"):
         self.out = out
         self.ssa = ssa
-        self.declaredStack = [set(declared)]
+        self.declaredStack = [set([str(x) for x in declared])]
         self.decltype = decltype
         self.cprinter = MyCCodeSympyPrinter()
-                      
+
+    def currentlyDeclared(self):
+        return self.declaredStack[-1]
     def pushStack(self):
-        self.declaredStack.append(set(self.declaredStack[-1]))
+        self.declaredStack.append(set(self.currentlyDeclared()))
     def popStack(self):
         return self.declaredStack.pop()
     def ifPrint(self,printer,ifSymbol,thenList,elseList,choiceList):
         for choice in choiceList:
-            if pretty(choice) not in self.declaredStack[-1]:
+            print(choice,self.currentlyDeclared())
+            if str(choice) not in self.currentlyDeclared():
                 self.out("%s %s;",self.decltype,choice)
-            self.declaredStack[-1].add(pretty(choice))
-        self.out("if (%s)",pretty(ifSymbol))
+            self.currentlyDeclared().add(str(choice))
+        self.out("if (%s)",ifSymbol)
         self.out("{")
         self.out.inc()
         self.pushStack()
         printer(thenList)
         for choiceVar in choiceList:
             choice = self.ssa[choiceVar]
-            lhs = pretty(choiceVar)
-            rhs = pretty(choice.thenVar)
+            lhs = str(choiceVar)
+            rhs = str(choice.thenVar)
             if lhs != rhs:
                 self.out("%s = %s;",lhs,rhs)
         self.popStack()
@@ -106,8 +106,8 @@ class CPrintVisitor:
         printer(elseList)
         for choiceVar in choiceList:
             choice = self.ssa[choiceVar]
-            lhs = pretty(choiceVar)
-            rhs = pretty(choice.elseVar)
+            lhs = str(choiceVar)
+            rhs = str(choice.elseVar)
             if lhs != rhs:
                 self.out("%s = %s;",lhs,rhs)
         self.popStack()
@@ -117,41 +117,35 @@ class CPrintVisitor:
         rhsText = self.cprinter.doprint(rhs.sympy, None)
         self.equationPrintWithRhs(lhs,rhsText)
     def equationPrintWithRhs(self,lhs,rhsText):
-        if pretty(lhs) not in self.declaredStack[-1]:
-            self.out("%s %s = %s;",self.decltype,pretty(lhs),rhsText)
-            self.declaredStack[-1].add(pretty(lhs))
+        if str(lhs) not in self.currentlyDeclared():
+            self.out("%s %s = %s;",self.decltype,lhs,rhsText)
+            self.currentlyDeclared().add(str(lhs))
         else:
-            self.out("%s = %s;",pretty(lhs),rhsText)
+            self.out("%s = %s;",lhs,rhsText)
 
-class ParamPrintVisitor:
-    def __init__(self, out, otherPrintVisitor, params):
-        self.out  = out
-        self.other = otherPrintVisitor
+class ParamPrintVisitor(CPrintVisitor):
+    def __init__(self, out, ssa, declared, params, decltype="double"):
         self.params = params
-        self.cprinter = MyCCodeSympyPrinter()
-    def ifPrint(self,printer,ifSymbol,thenList,elseList,choiceList):
-        self.other.ifPrint(printer,ifSymbol,thenList,elseList,choiceList)
+        super(ParamPrintVisitor,self).__init__(out, ssa, declared, decltype)
     def equationPrint(self,lhs,rhs):
-        self.other.declaredStack[-1].add(pretty(lhs))
         rhsText = self.cprinter.doprint(rhs.sympy, None)
         if lhs in self.params:
-            self.out("setDefault(%s, %s);", pretty(lhs),rhsText)
+            self.currentlyDeclared().add(str(lhs))
+            self.out("setDefault(%s, %s);", lhs,rhsText)
         else:
-            self.other.equationPrint(lhs,rhs)
+            super(ParamPrintVisitor,self).equationPrint(lhs,rhs)
 
-class InterpolatePrintVisitor:
-    def __init__(self, otherPrintVisitor, interps):
-        self.other = otherPrintVisitor
+class InterpolatePrintVisitor(CPrintVisitor):
+    def __init__(self, out, ssa, declared, interps, decltype="double"):
         self.interps = interps
-    def ifPrint(self,printer,ifSymbol,thenList,elseList,choiceList):
-        self.other.ifPrint(printer,ifSymbol,thenList,elseList,choiceList)
+        super(InterpolatePrintVisitor, self).__init__(out,ssa,declared,decltype)
     def equationPrint(self,lhs,rhs):
         if lhs in self.interps:
             (interpVar, count) = self.interps[lhs]
-            rhsText = "_interpolant[%d].eval(%s)" % (count, pretty(interpVar))
-            self.other.equationPrintWithRhs(lhs,rhsText)
+            rhsText = "_interpolant[%d].eval(%s)" % (count, interpVar)
+            self.equationPrintWithRhs(lhs,rhsText)
         else:
-            self.other.equationPrint(lhs,rhs)
+            super(InterpolatePrintVisitor,self).equationPrint(lhs,rhs)
 
 def generateCardioid(model, targetName):
     template = {}
@@ -255,7 +249,7 @@ namespace %(target)s
 
     out.inc(2)
     for var in order(diffvars):
-        out("double %s;", pretty(var))
+        out("double %s;", var)
     out.dec(2)
     out('''
    };
@@ -291,7 +285,7 @@ namespace %(target)s
       //PARAMETERS''', template)
     out.inc(2)
     for var in order(params):
-        out("double %s;", pretty(var))
+        out("double %s;", var)
     out.dec(2)
     out('''
       //per-cell flags
@@ -350,8 +344,7 @@ namespace scanReaction
       //EDIT_PARAMETERS''', template)
     out.inc(2)
     good = set([dt])
-    cprinter = CPrintVisitor(out, model.ssa, params)
-    paramPrinter = ParamPrintVisitor(out, cprinter, params)
+    paramPrinter = ParamPrintVisitor(out, model.ssa, params, params)
     model.printTarget(good, params, paramPrinter)
     good |= params
     out.dec(2)
@@ -473,11 +466,11 @@ void ThisReaction::createInterpolants(const double _dt) {
         target,fit = fitMap[fitCount]
         (lb,ub,inc) = model.info("interp",fit).split(",")
         lookup = {
-            "target" : pretty(target),
+            "target" : target,
             "ub" : ub,
             "lb" : lb,
             "inc" : inc,
-            "fit" : pretty(fit),
+            "fit" : fit,
             "fitCount" : fitCount,
         }
         out("{")
@@ -516,8 +509,8 @@ void ThisReaction::calc(double _dt, const VectorDouble32& __Vm,
    //define the constants''', template)
     out.inc()
 
-    cprinter = CPrintVisitor(out, model.ssa, params)
-    model.printTarget(good,computeAllDepend&constants,cprinter)
+    iprinter = InterpolatePrintVisitor(out, model.ssa, params, interps)
+    model.printTarget(good,computeAllDepend&constants,iprinter)
 
     good |= constants
     
@@ -532,11 +525,10 @@ void ThisReaction::calc(double _dt, const VectorDouble32& __Vm,
       //set all state variables''', template)
     out.inc(2)
     for var in order(diffvars):
-        out('const double %s=state_[__ii].%s;',pretty(var),pretty(var))
+        out('const double %s=state_[__ii].%s;',var,var)
     good |= diffvars
     good.add(V)
 
-    iprinter = InterpolatePrintVisitor(cprinter, interps)
     model.printSet(model.allDependencies(good|allfits,computeTargets)-good, iprinter)
     
     out.dec(2)
@@ -545,13 +537,13 @@ void ThisReaction::calc(double _dt, const VectorDouble32& __Vm,
       //EDIT_STATE''', template)
     out.inc(2)
     for var in order(diffvars-gates):
-        out('state_[__ii].%s += _dt*%s;',pretty(var),pretty(diffvarUpdate[var]))
+        out('state_[__ii].%s += _dt*%s;',var,diffvarUpdate[var])
     for var in order(gates):
         (RLA,RLB) = gateTargets[var]
         out('state_[__ii].%(v)s = %(a)s*%(v)s + %(b)s;',
-            v=pretty(var),
-            a=pretty(RLA),
-            b=pretty(RLB),
+            v=var,
+            a=RLA,
+            b=RLB,
         )
                      
     out.dec(2)
@@ -584,7 +576,7 @@ void ThisReaction::initializeMembraneVoltage(VectorDouble32& __Vm)
 ''', template)
     out.inc()
     for var in order(diffvars):
-        out('__initState.%s = %s;',pretty(var),pretty(var))
+        out('__initState.%s = %s;',var,var)
     out.dec()
     out('''      
    
@@ -599,7 +591,7 @@ enum varHandles
 {''', template)
     out.inc()
     for var in order(diffvars)+order(tracevars-diffvars):
-        out('%s_handle,',pretty(var))
+        out('%s_handle,',var)
     out.dec()
     out('''
    NUMHANDLES
@@ -615,7 +607,7 @@ const string ThisReaction::getUnit(const std::string& varName) const
             unitText = "INVALID"
         else:
             unitText = str(varUnit.rawUnit)
-        out('else if (varName == "%s") { return "%s"; }',pretty(var),unitText)
+        out('else if (varName == "%s") { return "%s"; }',var,unitText)
     out.dec()
     out('''
    return "INVALID";
@@ -627,7 +619,7 @@ int ThisReaction::getVarHandle(const std::string& varName) const
    if (0) {}''', template)
     out.inc()
     for var in order(diffvars|tracevars):
-        out('else if (varName == "%s") { return %s_handle; }', pretty(var), pretty(var))
+        out('else if (varName == "%s") { return %s_handle; }', var, var)
     out.dec()
     out('''
 
@@ -639,7 +631,7 @@ void ThisReaction::setValue(int iCell, int varHandle, double value)
    if (0) {}''', template)
     out.inc()
     for var in order(diffvars):
-        out('else if (varHandle == %s_handle) { state_[iCell].%s = value; }', pretty(var), pretty(var))
+        out('else if (varHandle == %s_handle) { state_[iCell].%s = value; }', var, var)
     out.dec()
     out('''
 }
@@ -650,7 +642,7 @@ double ThisReaction::getValue(int iCell, int varHandle) const
     out.inc()
     out('if (0) {}')
     for var in order(diffvars):
-        out('else if (varHandle == %s_handle) { return state_[iCell].%s; }', pretty(var), pretty(var))
+        out('else if (varHandle == %s_handle) { return state_[iCell].%s; }', var, var)
     out.dec()
     out('''
 
@@ -661,16 +653,16 @@ double ThisReaction::getValue(int iCell, int varHandle, double V) const
 {''', template)
     out.inc()
     for var in order(diffvars):
-        out('const double %s=state_[iCell].%s;',pretty(var),pretty(var))   
+        out('const double %s=state_[iCell].%s;',var,var)   
     out('if (0) {}')
     for var in order(diffvars|tracevars):
-        out('else if (varHandle == %s_handle)', pretty(var))
+        out('else if (varHandle == %s_handle)', var)
         out('{')
         out.inc()
         good=diffvars|set([V])|params
         cprinter = CPrintVisitor(out, model.ssa, good)
         model.printTarget(good,set([var])-params,cprinter)
-        out('return %s;',pretty(var))
+        out('return %s;',var)
         out.dec()
         out('}')
     out.dec()
@@ -686,8 +678,8 @@ void ThisReaction::getCheckpointInfo(vector<string>& fieldNames,
    fieldUnits.clear();''', template)
     out.inc()
     for var in order(diffvars):
-        out('fieldNames.push_back("%s");',pretty(var))
-        out('fieldUnits.push_back(getUnit("%s"));',pretty(var))
+        out('fieldNames.push_back("%s");',var)
+        out('fieldUnits.push_back(getUnit("%s"));',var)
     out.dec()
     out('''
 }
