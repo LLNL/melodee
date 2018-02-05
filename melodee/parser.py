@@ -31,7 +31,7 @@ import ply.lex as lex
 import ply.yacc as yacc
 
 from melodee import units
-from melodee.utility import order
+from melodee.utility import order,itemsOrderedByKey,itemsOrderedByValue
 
 ###################################################################
 #these parts make up the external API
@@ -621,11 +621,6 @@ class Encapsulation:
     
 def fullName(tupleName):
     return ":".join(tupleName)
-
-def itemsOrderedByValue(myDict):
-    return sorted(list(myDict.items()), key=lambda x: x[1])
-def itemsOrderedByKey(myDict):
-    return sorted(list(myDict.items()), key=lambda x: x[0])
 
 def consolidateSystem(timeUnit, rootEncap, connections,si):
         self = ConsolidatedSystem()

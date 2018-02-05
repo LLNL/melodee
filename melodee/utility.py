@@ -73,3 +73,9 @@ def order(iterable):
 def unzip(lll):
     """Does the opposite of zip"""
     return list(zip(*lll))
+
+def itemsOrderedByValue(myDict):
+    return sorted(list(myDict.items()), key=lambda x: x[1])
+def itemsOrderedByKey(myDict):
+    return sorted(list(myDict.items()), key=lambda x: x[0])
+

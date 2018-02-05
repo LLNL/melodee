@@ -1,0 +1,80 @@
+
+integrate time {ms};
+
+shared stretch {1};
+shared tension {N};
+
+shared actTime {ms};
+
+subsystem Lumens2009 {
+   
+
+   @flag celltype {enum(SLAVA,HUMAN,PAPER)};
+   celltype = PAPER;
+   
+   if (celltype == HUMAN) {
+      tau_r = 48;
+      tau_d = 32;
+      tau_sc = 425;
+      sigma_act = 100;
+   } else if (celltype == PAPER) {
+      tau_r = 48;
+      tau_d = 32;
+      tau_sc = 425;
+      sigma_act = 120;
+   } else {
+      tau_r = 28.1;
+      tau_d = 33.8;
+      tau_sc = 292.5;
+      sigma_act = 60;
+   }
+
+   C_rest = 0.02;
+   L_s0 = 1.51;
+   L_serel = 0.04;
+
+   ls_unloaded = 2;
+   v_max {um/s} = 0.007; //WARNING, slava has complicated calculations for this parameter.
+
+   diffvar Lsc {um};
+   diffvar C {1};
+
+   ls = stretch * ls_unloaded;
+   Lsc.init = L_s0;
+   C.init = C_rest;
+   /*
+   if (celltype == PAPER) {
+      Lsc.init = L_s0;
+   } else {
+      Lsc.init = ls - L_serel;
+   }
+   if (celltype == PAPER) {
+      C.init = C_rest;
+   } else {
+      C.init = 0;
+   }
+   */
+   
+   C_l = tanh(4.0 * pow(Lsc - L_s0, 2));
+   T = tau_sc * (0.29 + 0.3 * Lsc);
+   x = actTime / tau_r;
+   if (x > 8) {
+      x = 8;
+   }
+   f_rise = 0.02 * pow(8.0 - x, 2) * pow(x,3) * exp(-x);
+   l_snorm = (ls - Lsc) / L_serel;
+   Lsc.diff = (l_snorm - 1) * v_max;
+
+
+
+   C.diff = C_l * f_rise / tau_r + (C_rest - C) / (1 + exp((T - actTime) / tau_d) ) / tau_d;
+
+   provides tension;
+   if (Lsc - L_s0 < 0) {
+      tension = 0;
+   } else if (C < 0) {
+      tension = 0;
+   } else {
+      tension = sigma_act * C * (Lsc - L_s0) * l_snorm;
+   }
+}

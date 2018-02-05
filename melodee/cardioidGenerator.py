@@ -32,7 +32,7 @@ from sympy.core import S
 
 from melodee.parser import MelodeeParser,Differentiator
 from melodee import utility
-from melodee.utility import order
+from melodee.utility import order,itemsOrderedByKey
 
 def repeat(thing, repetitions):
     return (thing,) * repetitions
@@ -81,7 +81,6 @@ class CPrintVisitor:
         return self.declaredStack.pop()
     def ifPrint(self,printer,ifSymbol,thenList,elseList,choiceList):
         for choice in choiceList:
-            print(choice,self.currentlyDeclared())
             if str(choice) not in self.currentlyDeclared():
                 self.out("%s %s;",self.decltype,choice)
             self.currentlyDeclared().add(str(choice))
@@ -686,6 +685,7 @@ void ThisReaction::getCheckpointInfo(vector<string>& fieldNames,
 
 }''', template)
 
+
 generators = {
-    frozenset(["cardioid"]) : generateCardioid
+    frozenset(["cardioid"]) : generateCardioid,
 }
