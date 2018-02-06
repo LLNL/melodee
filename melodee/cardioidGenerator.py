@@ -112,6 +112,8 @@ class CPrintVisitor:
         self.popStack()
         self.out.dec()
         self.out("}")
+        for choice in choiceList:
+            self.printChoice(choice)
     def equationPrint(self,lhs,rhs):
         rhsText = self.cprinter.doprint(rhs.sympy, None)
         self.equationPrintWithRhs(lhs,rhsText)
@@ -121,6 +123,8 @@ class CPrintVisitor:
             self.currentlyDeclared().add(str(lhs))
         else:
             self.out("%s = %s;",lhs,rhsText)
+    def printChoice(self,lhs):
+        pass
 
 class ParamPrintVisitor(CPrintVisitor):
     def __init__(self, out, ssa, declared, params, decltype="double"):
@@ -133,7 +137,9 @@ class ParamPrintVisitor(CPrintVisitor):
             self.out("setDefault(%s, %s);", lhs,rhsText)
         else:
             super(ParamPrintVisitor,self).equationPrint(lhs,rhs)
-
+    def printChoice(self, lhs):
+        if lhs in self.params:
+            self.out("setDefault(%s, %s);", lhs,lhs)
 class InterpolatePrintVisitor(CPrintVisitor):
     def __init__(self, out, ssa, declared, interps, decltype="double"):
         self.interps = interps
@@ -145,7 +151,10 @@ class InterpolatePrintVisitor(CPrintVisitor):
             self.equationPrintWithRhs(lhs,rhsText)
         else:
             super(InterpolatePrintVisitor,self).equationPrint(lhs,rhs)
-
+    def printChoice(self, lhs):
+        if lhs in self.interps:
+            self.equationPrint(lhs,None)
+            
 def generateCardioid(model, targetName):
     template = {}
     template["target"] = targetName

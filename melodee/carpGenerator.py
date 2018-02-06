@@ -48,32 +48,32 @@ def stateName(var,statevars):
     else:
         return str(var)
 
-class LookupPrintVisitor:
-    def __init__(self,interpTargets,orig):
-        self.orig = orig
+class LookupPrintVisitor(CPrintVisitor):
+    def __init__(self,out, ssa, declared, interpTargets, decltype="double"):
         self.interpTargets = interpTargets
         self.fitFromTarget = {}
         for (fit,targets) in interpTargets.items():
             for target in targets:
                 self.fitFromTarget[target] = fit
-
+        super(LookupPrintVisitor,self).__init__(out,ssa,declared,decltype)
+    
     def printLookup(self,lhs):
         if lhs in self.interpTargets:
-            self.orig.out("LUT_data_t %s_row[NROWS_%s];",lhs,lhs)
-            self.orig.out("LUT_interpRow(&IF->tables[_%s_TAB], %s, __i, %s_row);",lhs,lhs,lhs) 
+            self.out("LUT_data_t %s_row[NROWS_%s];",lhs,lhs)
+            self.out("LUT_interpRow(&IF->tables[_%s_TAB], %s, __i, %s_row);",lhs,lhs,lhs) 
 
     def equationPrint(self,lhs,rhs):
         if lhs in self.fitFromTarget:
             rhsText = "%s_row[%s_idx]" % (self.fitFromTarget[lhs],lhs)
-            self.orig.equationPrintWithRhs(lhs,rhsText)
+            self.equationPrintWithRhs(lhs,rhsText)
         else:
-            self.orig.equationPrint(lhs,rhs)
+            super(LookupPrintVisitor,self).equationPrint(lhs,rhs)
         if lhs in self.interpTargets:
             self.printLookup(lhs)
+    def printChoice(self, lhs):
+        if lhs in self.fitFromTarget:
+            self.equationPrint(lhs,None)
 
-    def ifPrint(self,*args,**kwargs):
-        return self.orig.ifPrint(*args,**kwargs)
-            
 def generateCarp(model, targetName):
     si = model.si
     unitFromExternalName = {"Vm" : si.get("mV"),
@@ -550,7 +550,7 @@ GLOBAL void compute_%(target)s(int start, int end, ION_IF *IF, GlobalData_t **im
     out('//Change the units of external variables as appropriate.')
     out('//sv->Ca_i *= 1e-3;')
     
-    cprinter=LookupPrintVisitor(interpTargets,CPrintVisitor(out, model.ssa, set()))
+    cprinter=LookupPrintVisitor(out, model.ssa, set(),interpTargets)
     out('//Compute lookup tables for things that have already been defined.')
     for var in order(good & set(interpTargets.keys())):
         cprinter.printLookup(var)
