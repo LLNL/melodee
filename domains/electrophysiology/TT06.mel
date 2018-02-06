@@ -241,6 +241,7 @@ subsystem TT06 {
       provides Ca_o {uM} = 2;
       provides diffvar Ca_i {uM};
       provides diffvar @interp(1e-7,1e-1,1e-6) Ca_ss {uM};
+      //provides diffvar Ca_ss {uM};
       diffvar Ca_SR {uM};
       diffvar R_prime {1};
       shared i_b_Ca {uA/uF};
@@ -286,7 +287,11 @@ subsystem TT06 {
          @param g_CaL = 0.0000398;
          i_CalTerm1 = 4*(V-15)*pow(F,2)/(R*T);
          i_CalTerm2 = exp(2*(V-15)*F/(R*T));
-         i_CalTerm3 = i_CalTerm1/(i_CalTerm2-1);
+         if( V==15 ) {
+           i_CalTerm3 = 2*F;
+         } else {
+           i_CalTerm3 = i_CalTerm1/(i_CalTerm2-1);
+         }
          i_CalTerm4 = i_CalTerm3*i_CalTerm2;
          provides @trace i_CaL = g_CaL*d*f*f2*fCass*(0.25*Ca_ss*i_CalTerm4-Ca_o*i_CalTerm3);
          provides accum i_Caitot += i_CaL;
