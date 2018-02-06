@@ -398,7 +398,7 @@ void construct_tables_%(target)s( ION_IF *IF )
   // Create the %(var)s lookup table
   LUT* %(var)s_tab = &IF->tables[_%(var)s_TAB];
   {
-     double epislon=fabs(%(lb)s)*1e-7;
+     double epsilon=fabs(%(lb)s)*1e-7;
      LUT_alloc(%(var)s_tab, NROWS_%(var)s, %(lb)s+epsilon, %(ub)s+epsilon, %(inc)s, "%(target)s %(var)s");
   }
   for (int __i=%(var)s_tab->mn_ind; __i<=%(var)s_tab->mx_ind; __i++) {
