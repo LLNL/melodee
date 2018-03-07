@@ -200,8 +200,8 @@ def generateCardioid(model, targetName, arch="cpu"):
         L = model.ssa[gateJacobians[gate]].sympy
         M = (F-L*gate).simplify()
         
-        RLA = model.addInstruction("_%s_RLA" % gate, sympy.exp(dt*L))
-        RLB = model.addInstruction("_%s_RLB" % gate, M/L*(RLA-1))
+        RLA = model.addInstruction("_%s_RLA" % gate, sympy.exp(dt*L)-1)
+        RLB = model.addInstruction("_%s_RLB" % gate, M/L)
         gateTargets[gate] = (RLA,RLB)
 
     expensiveVars = model.extractExpensiveFunctions()
@@ -641,7 +641,7 @@ void ThisReaction::constructKernel()
             out(r'"_state[_ii+%s_off*_nCells] += _dt*%s;\n"',var,diffvarUpdate[var])
         for var in order(gates):
             (RLA,RLB) = gateTargets[var]
-            out(r'"_state[_ii+%(v)s_off*_nCells] = %(a)s*%(v)s + %(b)s;\n"',
+            out(r'"_state[_ii+%(v)s_off*_nCells] += %(a)s*(%(v)s+%(b)s);\n"',
             v=var,
             a=RLA,
             b=RLB,
@@ -797,7 +797,7 @@ void ThisReaction::calc(double _dt, const VectorDouble32& __Vm,
             out('state_[__ii].%s += _dt*%s;',var,diffvarUpdate[var])
         for var in order(gates):
             (RLA,RLB) = gateTargets[var]
-            out('state_[__ii].%(v)s = %(a)s*%(v)s + %(b)s;',
+            out('state_[__ii].%(v)s += %(a)s*(%(v)s+%(b)s);',
                 v=var,
                 a=RLA,
                 b=RLB,
