@@ -1,0 +1,216 @@
+
+integrate time {ms};
+
+shared lambda {1};
+shared lambda_diff {1/ms};
+shared tension {N};
+
+shared Cai {mM};
+
+subsystem Rice {
+
+   xbmod = 0.4;
+
+
+   xPsi = 2;
+   kxb = 205;
+
+
+   //SLmax = 2.4;
+   //SLmin = 1.4;
+
+   //SLcol = 2.25;
+   //PCon_col = 0.02;
+   //PExp_col = 70;
+
+
+   gxb = 140.e-3;
+   //gxmdc = 60.0;
+
+   // PCon_t = 0.002;
+   //PExp_t = 10;
+   
+   hf = 360.0e-3;
+   hb = 400.0e-3;
+   //hbmdc = 0;
+   //hfmdc = 5;
+   
+   sigmap = 1.0;
+   sigman = 1.0;
+
+   fapp = 5000.e-3;
+   gapp = 7.0e-3;
+   gslmod = 6.;
+   len_thick = 1.65;
+   len_hbare = 0.1;
+   len_thin = 1.2;
+   
+   kon = 30.e-3;
+   koffL = 250.e-3;
+   koffH = 25.e-3;
+   
+   
+   Qkon = 1.5;
+   Qkoff = 1.3;
+   Qkn_p = 1.6;
+   Qkp_n = 1.6;
+   Qfapp = 6.25;
+   Qgapp = 2.5;
+   Qhf = 6.25;
+   Qhb = 6.25;
+   Qgxb = 6.25;
+   
+   
+   perm50 = 0.5;
+   nperm = 15.0;
+   
+   kn_p = 500e-3;
+   kp_n = 50e-3;
+   
+   //RTOL = 1e-4;
+   //Feedback_factor = 1.5;
+   
+
+   //SLset = 2.3;
+   SLrest = 1.9;
+   
+
+   x_0 = 0.007;
+   
+   TempCelsius = 36;
+   //TempKelvin = (273.0 + TempCelsius);
+
+   diffvar N {1};
+   diffvar P {1};
+   diffvar XBprer {1};
+   diffvar XBpostr {1};
+   diffvar xXBprer {1/ms};
+   diffvar xXBpostr {1/ms};
+   diffvar TnCaL {mM};
+   diffvar TnCaH {mM};
+   
+
+   N.init = 1 - 0.000001;
+   P.init = 0.000001;
+   XBprer.init = 0.000001;
+   XBpostr.init = 0.000001;
+   xXBprer.init = 0.000001;
+   xXBpostr.init = x_0;
+   TnCaL.init = 0.000001;
+   TnCaH.init = 0.000001;
+   
+   SSXBpostr = fapp * hf /
+      (gxb * hf + fapp * hf + gxb * gapp + hb * fapp + hb * gapp + gxb*fapp);
+
+   force_coeff = 1.0 / x_0 / SSXBpostr;
+
+   konT = kon * pow(Qkon, (TempCelsius - 37) / 10.);
+   koffLT = koffL * pow(Qkoff, (TempCelsius - 37) / 10.);
+   koffHT = koffH * pow(Qkoff, (TempCelsius - 37) / 10.);
+
+
+   Ca_concentration = Cai;
+
+   TnCaL.diff = konT * Ca_concentration * (1.0 - TnCaL) - koffLT * TnCaL;
+   TnCaH.diff = konT * Ca_concentration * (1.0 - TnCaH) - koffHT * TnCaH;
+
+   rl = lambda * SLrest;
+   sovr_ze = Min(len_thick / 2., rl / 2.);
+   sovr_cle = Max(rl / 2. - (rl - len_thin), len_hbare / 2.);
+   len_sovr = sovr_ze - sovr_cle;
+   SOVFThick = len_sovr * 2. / (len_thick - len_hbare);
+   SOVFThin = len_sovr / len_thin;
+
+   perm = (1.0 - SOVFThin) * TnCaL + SOVFThin * TnCaH;
+   permtot = sqrt((1.0 / (1.0 + pow((perm50 / perm), nperm))));
+
+   /*if(!isfinite(permtot)) {
+      permtot = 0.00000001;
+   }
+   */
+      
+   if(permtot < 0.00000001) {
+      permtot = 0.00000001;
+   }
+   
+   if(100.0 < 1.0 / permtot) {
+      inprmt = 100.0;
+   } else {
+      inprmt = 1.0 / permtot;
+   }
+   
+
+   kn_pT = kn_p * permtot * pow(Qkn_p, (TempCelsius - 37.) / 10.);
+   kp_nT = kp_n * inprmt * pow(Qkp_n, (TempCelsius - 37.) / 10.);
+
+   fappT = fapp * xbmod * pow(Qfapp, (TempCelsius - 37.) / 10.);
+
+   gapslmd = 1.0 + (1.0 - SOVFThick) * gslmod;
+   gappT = gapp * gapslmd * xbmod * pow(Qgapp, (TempCelsius - 37) / 10.);
+
+
+   hfmd = exp(-sign(xXBprer) * 5.0 * ((xXBprer / x_0) * (xXBprer / x_0)));
+   hfT = hf * hfmd * xbmod * pow(Qhf, (TempCelsius - 37) / 10.);
+   hbT = hb * xbmod * pow(Qhb, (TempCelsius - 37) / 10.);
+
+   if(x_0 - xXBpostr > 0) {
+      gxbmd = exp(sigmap * ((x_0 - xXBpostr) / x_0) * ((x_0 - xXBpostr) / x_0));
+   } else {
+      gxbmd = exp(sigman * (((xXBpostr - x_0) / x_0) * (xXBpostr - x_0) / x_0));
+   }
+   
+   gxbT = gxb * gxbmd * xbmod * pow(Qgxb, (TempCelsius - 37.) / 10.);
+
+
+   delta_SL = lambda_diff * SLrest;
+
+
+   N.diff = -kn_pT * N + kp_nT * P;
+   P.diff = -kp_nT * P + kn_pT * N - fappT * P + gappT * XBprer + gxbT * XBpostr;
+   XBprer.diff = fappT * P - gappT * XBprer - hfT * XBprer + hbT * XBpostr;
+   XBpostr.diff = hfT * XBprer - hbT * XBpostr - gxbT * XBpostr;
+
+   dtyf_prer = (hbT * fappT + gxbT * fappT) / (fappT * hfT + gxbT * hfT + gxbT * gappT + hbT * fappT + hbT * gappT + gxbT * fappT);
+   dtyf_postr = fappT * hfT / (fappT * hfT + gxbT * hfT + gxbT * gappT + hbT * fappT + hbT * gappT + gxbT * fappT);
+
+   v = delta_SL;
+
+   if(delta_SL > 0.1) {
+      v = 0.1;
+   }
+   
+   if(delta_SL < -0.1) {
+      v = -0.1;
+   }
+
+   xXBprer.diff = v / 2. +
+      xPsi / dtyf_prer * (-xXBprer * fappT + (xXBpostr - x_0 - xXBprer) * hbT);
+   xXBpostr.diff = v / 2. +
+      xPsi / dtyf_postr * ((x_0 + xXBprer - xXBpostr)) * hfT;
+
+
+   provides tension = kxb * SOVFThick * ( xXBpostr*XBpostr + xXBprer*XBprer) * force_coeff;
+}
+
+shared bcl_time {ms};
+
+subsystem Rice_normal_calcium {
+   param scale_Ca_amp {1} = 1;
+
+   tau1 = 35;
+   tau2 = 170;
+   Ca_amp = 1.0 * scale_Ca_amp;
+   Ca_amp1 = 0.7 * scale_Ca_amp;
+   Cad = 0.09;
+   betta = pow(tau1 / tau2, -1.0 / (tau1 / tau2 - 1)) - pow(tau1 / tau2, -1.0 / (1 - tau2 / tau1));
+
+   provides Cai;
+   res = (Ca_amp - Cad) / betta * (exp(-bcl_time / tau1) - exp(-bcl_time / tau2)) + Cad;
+
+   if(res > Ca_amp1) {
+      Cai = Ca_amp1;
+   } else {
+      Cai = (Ca_amp - Cad) / betta * (exp(-bcl_time / tau1) - exp(-bcl_time / tau2)) + Cad;
+   }
+}
+
