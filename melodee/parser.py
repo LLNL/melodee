@@ -118,7 +118,10 @@ class ConsolidatedSystem:
         return self._namedVariables[name][symbol]
 
     def addSymbol(self, name):
-        return Symbol(name)
+        if isinstance(name, basestring):
+            return Symbol(name)
+        else:
+            return name
 
     def addSSA(self, name, sympy):
         var = self.addSymbol(name)
