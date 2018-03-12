@@ -25,6 +25,7 @@
 
 import sys
 import re
+import sympy
 from sympy.printing.octave import OctaveCodePrinter
 
 
@@ -33,16 +34,25 @@ from melodee import utility
 from melodee.utility import order
 
 def pretty(symbol):
+    if str(symbol)[0] == '_':
+        return "U"+str(symbol)
+    else:
+        return str(symbol)
     return str(symbol)
 
 class MyOctaveCodeSympyPrinter(OctaveCodePrinter):
     def __init__(self,*args,**kwargs):
         OctaveCodePrinter.__init__(self, *args, **kwargs)
-    def _print_Symbol(self,symbol):
-        if str(symbol)[0] == '_':
-            return "U"+str(symbol)
+    def _print_Relational(self,expr):
+        if expr.rel_op == "==" or expr.rel_op == "!=":
+            PREC = sympy.printing.precedence.precedence(expr)
+            return "%s %s %s" % (self.parenthesize(expr.lhs, PREC),
+                                 expr.rel_op,
+                                 self.parenthesize(expr.rhs, PREC))
         else:
-            return str(symbol)
+            return super(MyOctaveCodeSympyPrinter, self)._print_Relational(expr)
+    def _print_Symbol(self,symbol):
+        return pretty(symbol)
 
 class MatlabPrintVisitor:
     def __init__(self, out, ssa, params):
@@ -105,12 +115,20 @@ def generateMatlab(model, targetName):
     else:
         template["arglower"] = 0
 
+    good = set()
+    if model.time != None:
+        good.add(model.time)
+        timename = str(model.time)
+    else:
+        timename = "U_current_time"
+    template["timename"] = timename
+        
     out = utility.Indenter(open(targetName+"_init.m","w"))
     params = model.varsWithAttribute("param")
     printer = MatlabPrintVisitor(out,model.ssa,params)
     out("""
-function [U_y_init, U_ordering, U_params] = %(target)s_init(varargin)
-   narginchk(0+%(arglower)d,1);
+function [U_y_init, U_ordering, U_params] = %(target)s_init(%(timename)s,varargin)
+   narginchk(1+%(arglower)d,2);
    if (nargin >= 1)
       U_params = varargin{1};
    else
@@ -118,18 +136,6 @@ function [U_y_init, U_ordering, U_params] = %(target)s_init(varargin)
    end
 """ % template)
     out.inc()
-
-    
-    #define time
-    good = set()
-    if model.time != None:
-        timename = pretty(model.time)
-        out("% define time")
-        out("%s = 0;",timename)
-        good.add(model.time)
-    else:
-        timename = "U_current_time"
-    template["timename"] = timename
 
     if inputs:
         out("%define the inputs")
