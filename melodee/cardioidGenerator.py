@@ -65,7 +65,7 @@ class MyCCodeSympyPrinter(C99CodePrinter):
         else:
             return super(MyCCodeSympyPrinter, self)._print_Relational(expr)
 
-class CPrintVisitor:
+class CPrintVisitor(object):
     def __init__(self, out, ssa, declared, decltype="double"):
         self.out = out
         self.ssa = ssa
@@ -663,7 +663,7 @@ double ThisReaction::getValue(int iCell, int varHandle, double V) const
 ''', template)
     out.inc()
     for var in order(diffvars):
-        out('const double %s=stateData[_%s_off*nCells_+iCell].%s;',var,var)
+        out('const double %s=stateData[_%s_off*nCells_+iCell];',var,var)
     out('if (0) {}')
     for var in order(diffvars|tracevars):
         out('else if (varHandle == %s_handle)', var)
