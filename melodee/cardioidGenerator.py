@@ -658,10 +658,12 @@ double ThisReaction::getValue(int iCell, int varHandle) const
 }
 
 double ThisReaction::getValue(int iCell, int varHandle, double V) const
-{''', template)
+{
+   ConstArrayView<double> stateData = stateTransport_;
+''', template)
     out.inc()
     for var in order(diffvars):
-        out('const double %s=state_[iCell].%s;',var,var)   
+        out('const double %s=stateData[_%s_off*nCells_+iCell].%s;',var,var)
     out('if (0) {}')
     for var in order(diffvars|tracevars):
         out('else if (varHandle == %s_handle)', var)
