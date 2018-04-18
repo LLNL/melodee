@@ -85,34 +85,35 @@ class CPrintVisitor(object):
             if str(choice) not in self.currentlyDeclared():
                 self.out("%s %s;",self.decltype,choice)
             self.currentlyDeclared().add(str(choice))
-        self.out("if (%s)",ifSymbol)
-        self.out("{")
-        self.out.inc()
-        self.pushStack()
-        printer(thenList)
-        for choiceVar in choiceList:
-            choice = self.ssa[choiceVar]
-            lhs = str(choiceVar)
-            rhs = str(choice.thenVar)
-            if lhs != rhs:
-                self.out("%s = %s;",lhs,rhs)
-        self.popStack()
-        self.out.dec()
-        self.out("}")
-        self.out("else")
-        self.out("{")
-        self.out.inc()
-        self.pushStack()
-        printer(elseList)
-        for choiceVar in choiceList:
-            choice = self.ssa[choiceVar]
-            lhs = str(choiceVar)
-            rhs = str(choice.elseVar)
-            if lhs != rhs:
-                self.out("%s = %s;",lhs,rhs)
-        self.popStack()
-        self.out.dec()
-        self.out("}")
+        if ifSymbol != None:
+            self.out("if (%s)",ifSymbol)
+            self.out("{")
+            self.out.inc()
+            self.pushStack()
+            printer(thenList)
+            for choiceVar in choiceList:
+                choice = self.ssa[choiceVar]
+                lhs = str(choiceVar)
+                rhs = str(choice.thenVar)
+                if lhs != rhs:
+                    self.out("%s = %s;",lhs,rhs)
+            self.popStack()
+            self.out.dec()
+            self.out("}")
+            self.out("else")
+            self.out("{")
+            self.out.inc()
+            self.pushStack()
+            printer(elseList)
+            for choiceVar in choiceList:
+                choice = self.ssa[choiceVar]
+                lhs = str(choiceVar)
+                rhs = str(choice.elseVar)
+                if lhs != rhs:
+                    self.out("%s = %s;",lhs,rhs)
+            self.popStack()
+            self.out.dec()
+            self.out("}")
         for choice in choiceList:
             self.printChoice(choice)
     def equationPrint(self,lhs,rhs):
