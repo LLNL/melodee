@@ -289,7 +289,11 @@ def generateCardioid(model, targetName, arch="cpu"):
 #include "TransportCoordinator.hh"
 #include <nvrtc.h>
 #include <cuda.h>
-''', template)    
+''', template)
+    elif arch=="cpu":
+        pass
+    else:
+        assert(False)
     out(r'''    
 namespace scanReaction 
 {
@@ -300,7 +304,9 @@ namespace %(target)s
 {
 
 ''', template)
-    if arch=="cpu":
+    if arch=="nvidia":
+        pass
+    elif arch=="cpu":
         out.inc()
         out(r'struct State')
         out("{")
@@ -310,6 +316,8 @@ namespace %(target)s
         out.dec()
         out("};")
         out.dec()
+    else:
+        assert(False)
     out(r'''
 
    class ThisReaction : public Reaction
@@ -360,7 +368,7 @@ namespace %(target)s
       CUfunction _kernel;
       int blockSize_;
 ''', template)
-    else:
+    elif arch=="cpu":
         out(r'''
     public:
       void calc(double dt,
@@ -371,6 +379,8 @@ namespace %(target)s
     private:
       std::vector<State> state_;
 ''',template)
+    else:
+        assert(False)
     out.inc(2)
     out("Interpolation _interpolant[%d];" % fitCount)
     out.dec(2)
@@ -513,6 +523,10 @@ namespace scanReaction
         out.inc(2)
         out("reaction->constructKernel();")
         out.dec(2)
+    elif arch=="cpu":
+        pass
+    else:
+        assert(False)
     out('''
       return reaction;
    }
@@ -775,7 +789,7 @@ ThisReaction::~ThisReaction() {
 }
 
 ''',template)
-    else:
+    elif arch=="cpu":
         out('''
 ThisReaction::ThisReaction(const int numPoints, const double __dt)
 : nCells_(numPoints)
@@ -873,6 +887,8 @@ void ThisReaction::calc(double _dt, const VectorDouble32& __Vm,
       __dVm[__ii] = -Iion;
    }
 }''',template)
+    else:
+        assert(False)
     out('''
 
    
@@ -901,14 +917,18 @@ void ThisReaction::initializeMembraneVoltage(VectorDouble32& __Vm)
     if arch=="nvidia":
         def stateName(var,index):
             return "stateData[_%s_off*nCells_+%s]" % (var,index)
-    else:
+    elif arch=="cpu":
         def stateName(var,index):
             return "state_[%s].%s" % (index,var)
-    
+    else:
+        assert(False)
+        
     if arch=="nvidia":
         out("ArrayView<double> stateData = stateTransport_;")
-    else:
+    elif arch=="cpu":
         out("state_.resize(nCells_);")
+    else:
+        assert(False)
     out(r'for (int iCell=0; iCell<nCells_; iCell++)')
     out('{')
     out.inc()
@@ -964,6 +984,10 @@ void ThisReaction::setValue(int iCell, int varHandle, double value)
     out.inc()
     if arch=="nvidia":
         out("ArrayView<double> stateData = stateTransport_;")
+    elif arch=="cpu":
+        pass
+    else:
+        assert(False)
     out("if (0) {}")
     for var in order(diffvars):
         out('else if (varHandle == %s_handle) { %s = value; }', var, stateName(var,"iCell"))
@@ -977,6 +1001,10 @@ double ThisReaction::getValue(int iCell, int varHandle) const
     out.inc()
     if arch=="nvidia":
         out("ConstArrayView<double> stateData = stateTransport_;")
+    elif arch=="cpu":
+        pass
+    else:
+        assert(False)
     out("if (0) {}")
     for var in order(diffvars):
         out('else if (varHandle == %s_handle) { return %s; }', var, stateName(var,"iCell"))
@@ -992,6 +1020,10 @@ double ThisReaction::getValue(int iCell, int varHandle, double V) const
     out.inc()
     if arch=="nvidia":
         out("ConstArrayView<double> stateData = stateTransport_;")
+    elif arch=="cpu":
+        pass
+    else:
+        assert(False)
     for var in order(diffvars):
         out('const double %s=%s;',var,stateName(var,"iCell"))
     out('if (0) {}')
