@@ -178,6 +178,7 @@ def generateCardioid(model, targetName, arch="cpu"):
     diffvars = model.diffvars()
     diffvarUpdate = {var : model.diffvarUpdate(var) for var in diffvars}
     params = model.varsWithAttribute("param")
+    markovs = model.varsWithAttribute("markov") & diffvars
     gates = model.varsWithAttribute("gate") & diffvars
     polyfits = model.varsWithAttribute("interp")
     tracevars = model.varsWithAttribute("trace")
@@ -191,6 +192,10 @@ def generateCardioid(model, targetName, arch="cpu"):
     gateJacobians = {}
     for gate in order(gates):
         (gateJacobians[gate],dontcare) = differ.diff(diffvarUpdate[gate],gate)
+    markovJacobians = { var : {} for var in markovs}
+    for imarkov in order(markovs):
+        for jmarkov in order(markovs):
+            (dontcare,markovJacobians[imarkov][jmarkov]) = differ.diff(diffvarUpdate[imarkov],jmarkov)
     differ.augmentInstructions()
 
     dt = model.addSymbol("_dt")
@@ -204,16 +209,35 @@ def generateCardioid(model, targetName, arch="cpu"):
         RLB = model.addInstruction("_%s_RLB" % gate, M/L)
         gateTargets[gate] = (RLA,RLB)
 
+    markovOld = {}
+    for markov in order(markovs):
+        markovOld[markov] = model.addSymbol("_mi_old_%s" % markov)
+    markovTargets = {}
+    for imarkov in order(markovs):
+        summation = 0
+        for jmarkov in order(markovs):
+            if imarkov == jmarkov:
+                continue
+            if jmarkov in markovTargets:
+                thisSym = markovTargets[jmarkov]
+            else:
+                thisSym = markovOld[jmarkov]
+            summation += markovJacobians[imarkov][jmarkov].sympy*thisSym
+        sss = (diffvarUpdate[imarkov]+dt*summation)/(1-dt*markovJacobians[imarkov][imarkov].sympy)
+        markovTargets[imarkov] = model.addInstruction("_mi_new_%s" % imarkov,sss)
+
     expensiveVars = model.extractExpensiveFunctions()
     model.makeNamesUnique()
 
     computeTargets = set()
     computeTargets.add(Iion)
-    computeTargets |= set([diffvarUpdate[var] for var in diffvars-gates])
+    computeTargets |= set([diffvarUpdate[var] for var in diffvars-gates-markovs])
     for gate in gates:
         (RLA,RLB) = gateTargets[gate]
         computeTargets.add(RLA)
         computeTargets.add(RLB)
+    for markov in markovs:
+        computeTargets.add(markovTargets[markov])
 
     approxvars = set([dt])
     statevars = model.inputs()|diffvars
@@ -786,14 +810,53 @@ void ThisReaction::calc(double _dt, const VectorDouble32& __Vm,
         good |= diffvars
         good.add(V)
 
-        model.printSet(model.allDependencies(good|allfits,computeTargets)-good, iprinter)
-    
-        out.dec(2)
-        out(r'''
-      
-      //EDIT_STATE''', template)
-        out.inc(2)
-        for var in order(diffvars-gates):
+        out("//get the gate updates (diagonalized exponential integrator)")
+        gateGoals = set()
+        for RLA,RLB in gateTargets.values():
+            gateGoals.add(RLA)
+            gateGoals.add(RLB)
+        good.add(dt)
+        gateSet = model.allDependencies(good,gateGoals)-good
+        model.printSet(gateSet,iprinter)
+        good |= gateSet
+
+        out("//get the other differential updates")
+        diffGoals = set([diffvarUpdate[var] for var in diffvars-gates])
+        diffSet = model.allDependencies(good,diffGoals)-good
+        model.printSet(diffSet, iprinter)
+        good |= diffSet
+
+        out("//Do the markov update (1 step rosenbrock with gauss siedel)")
+        for var in order(markovs):
+            out("double %s = %s;",markovTargets[var],diffvarUpdate[var])
+        out("int _count=0;")
+        out("double _error;")
+        out("do")
+        out("{")
+        out.inc()
+        iprinter.pushStack()
+
+        for var in order(markovs):
+            out("double %s = %s;",markovOld[var], markovTargets[var])
+        markovGoals = set(markovOld.values())
+        good |= markovGoals
+        cprinter.declaredStack[-1] |= set(["%s" % var for var in markovTargets.values()])
+        markovSet = model.allDependencies(good,set(markovTargets.values()))
+        model.printSet(markovSet,cprinter)
+
+        out("_error = 0;")
+        for var in order(markovs):
+            old = markovOld[var]
+            new = markovTargets[var]
+            out("_error += (%s-%s)*(%s-%s);",old,new,old,new)
+        out("_count++;")
+
+        iprinter.popStack()
+        out.dec()
+        out("} while (_error > 1e-100 && _count<50);")
+
+        out("//EDIT_STATE")
+        for var in order(diffvars-gates-markovs):
             out('state_[__ii].%s += _dt*%s;',var,diffvarUpdate[var])
         for var in order(gates):
             (RLA,RLB) = gateTargets[var]
@@ -802,6 +865,8 @@ void ThisReaction::calc(double _dt, const VectorDouble32& __Vm,
                 a=RLA,
                 b=RLB,
             )
+        for var in order(markovs):
+            out("%s += _dt*%s;",var,markovTargets[var])
                      
         out.dec(2)
         out('''      
