@@ -241,14 +241,14 @@ def generateCardioid(model, targetName, arch="cpu"):
 
     approxvars = set([dt])
     statevars = model.inputs()|diffvars
-    computeAllDepend = model.allDependencies(approxvars|statevars, computeTargets)
+    computeAllDepend = model.allDependencies(approxvars|statevars|params, computeTargets)
 
     constants = model.allExcluding(approxvars, statevars) & computeAllDepend
 
     polyfitTargets = {}
     allfits = set()
     for fit in polyfits:
-        good = approxvars | set([fit])
+        good = approxvars | params | set([fit])
         dependsOnlyOnFit = model.allExcluding(good, (statevars-good)|nointerps)
         polyfitCandidates = (dependsOnlyOnFit & computeAllDepend) - constants
 
@@ -257,7 +257,7 @@ def generateCardioid(model, targetName, arch="cpu"):
         polyfitCandidates -= inexpensiveFit
         
         externallyUsedFits = (
-            model.allDependencies(approxvars|statevars|polyfitCandidates, computeTargets)
+            model.allDependencies(approxvars|statevars|params|polyfitCandidates, computeTargets)
             &
             polyfitCandidates
             )
@@ -272,7 +272,7 @@ def generateCardioid(model, targetName, arch="cpu"):
             fitCount += 1
 
     computeAllDepend = model.allDependencies(
-        approxvars|statevars|allfits,
+        approxvars|statevars|params|allfits,
         computeTargets)
     constants = model.allExcluding(approxvars,statevars) & computeAllDepend
 
