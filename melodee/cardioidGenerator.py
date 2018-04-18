@@ -26,13 +26,14 @@
 import sys
 import re
 import sympy
+import io
 from sympy.printing.ccode import C99CodePrinter
 from sympy.core import S
 
 
 from melodee.parser import MelodeeParser,Differentiator
 from melodee import utility
-from melodee.utility import order,itemsOrderedByKey
+from melodee.utility import order
 
 def repeat(thing, repetitions):
     return (thing,) * repetitions
@@ -140,22 +141,37 @@ class ParamPrintVisitor(CPrintVisitor):
     def printChoice(self, lhs):
         if lhs in self.params:
             self.out("setDefault(%s, %s);", lhs,lhs)
-class InterpolatePrintVisitor(CPrintVisitor):
+class InterpolatePrintCPUVisitor(CPrintVisitor):
     def __init__(self, out, ssa, declared, interps, decltype="double"):
         self.interps = interps
-        super(InterpolatePrintVisitor, self).__init__(out,ssa,declared,decltype)
+        super(InterpolatePrintCPUVisitor, self).__init__(out,ssa,declared,decltype)
     def equationPrint(self,lhs,rhs):
         if lhs in self.interps:
             (interpVar, count) = self.interps[lhs]
             rhsText = "_interpolant[%d].eval(%s)" % (count, interpVar)
             self.equationPrintWithRhs(lhs,rhsText)
         else:
-            super(InterpolatePrintVisitor,self).equationPrint(lhs,rhs)
+            super(InterpolatePrintCPUVisitor,self).equationPrint(lhs,rhs)
     def printChoice(self, lhs):
         if lhs in self.interps:
             self.equationPrint(lhs,None)
-            
-def generateCardioid(model, targetName):
+
+class InterpolatePrintNvidiaVisitor(CPrintVisitor):
+    def __init__(self, out, ssa, declared, interps, decltype="double"):
+        self.interps = interps
+        super(InterpolatePrintNvidiaVisitor, self).__init__(out,ssa,declared,decltype)
+    def equationPrint(self,lhs,rhs):
+        if lhs in self.interps:
+            (interpVar, count) = self.interps[lhs]
+            self.out('"; generateInterpString(ss,_interpolant[%d], "%s"); ss << "',count,interpVar)
+            self.equationPrintWithRhs(lhs,"_ratPoly")
+        else:
+            super(InterpolatePrintNvidiaVisitor,self).equationPrint(lhs,rhs)
+    def printChoice(self, lhs):
+        if lhs in self.interps:
+            self.equationPrint(lhs,None)
+
+def generateCardioid(model, targetName, arch="cpu"):
     template = {}
     template["target"] = targetName
 
@@ -243,7 +259,14 @@ def generateCardioid(model, targetName):
 #include "object.h"
 #include <vector>
 #include <sstream>
-
+''', template)
+    if arch=="nvidia":
+        out(r'''
+#include "TransportCoordinator.hh"
+#include <nvrtc.h>
+#include <cuda.h>
+''', template)    
+    out(r'''    
 namespace scanReaction 
 {
     Reaction* scan%(target)s(OBJECT* obj, const int numPoints, const double __dt);
@@ -252,20 +275,18 @@ namespace scanReaction
 namespace %(target)s
 {
 
-   struct State
-   {''', template)
-
-    out.inc(2)
-    for var in order(diffvars):
-        out("double %s;", var)
-    out.dec(2)
-    out('''
-   };
-
-   struct PerCellFlags
-   { };
-   struct PerCellParameters
-   { };
+''', template)
+    if arch=="cpu":
+        out.inc()
+        out(r'struct State')
+        out("{")
+        out.inc()
+        for var in order(diffvars):
+            out("double %s;", var)
+        out.dec()
+        out("};")
+        out.dec()
+    out(r'''
 
    class ThisReaction : public Reaction
    {
@@ -274,13 +295,8 @@ namespace %(target)s
       std::string methodName() const;
       
       void createInterpolants(const double _dt);
-      void calc(double dt,
-                const VectorDouble32& Vm,
-                const std::vector<double>& iStim,
-                VectorDouble32& dVm);
       //void updateNonGate(double dt, const VectorDouble32&Vm, VectorDouble32&dVR);
       //void updateGate   (double dt, const VectorDouble32&Vm) ;
-      void initializeMembraneVoltage(VectorDouble32& Vm);
       virtual void getCheckpointInfo(std::vector<std::string>& fieldNames,
                                      std::vector<std::string>& fieldUnits) const;
       virtual int getVarHandle(const std::string& varName) const;
@@ -289,6 +305,10 @@ namespace %(target)s
       virtual double getValue(int iCell, int varHandle, double V) const;
       virtual const std::string getUnit(const std::string& varName) const;
 
+    private:
+      unsigned nCells_;
+      double __cachedDt;
+
     public:
       //PARAMETERS''', template)
     out.inc(2)
@@ -296,14 +316,37 @@ namespace %(target)s
         out("double %s;", var)
     out.dec(2)
     out('''
-      //per-cell flags
-      std::vector<PerCellFlags> perCellFlags_;
-      std::vector<PerCellParameters> perCellParameters_;
-
+''',template)
+    if arch=="nvidia":
+        out(r'''
+    public:
+      void calc(double dt,
+                const Managed<ArrayView<double>> Vm_m,
+                const Managed<ArrayView<double>> iStim_m,
+                Managed<ArrayView<double>> dVm_m);
+      void initializeMembraneVoltage(ArrayView<double> Vm);
+      virtual ~ThisReaction();
+      void constructKernel();
     private:
-      unsigned nCells_;
+      TransportCoordinator<PinnedVector<double> > stateTransport_;
+      std::string _program_code;
+      nvrtcProgram _program;
+      std::vector<char> _ptx;
+      CUmodule _module;
+      CUfunction _kernel;
+      int blockSize_;
+''', template)
+    else:
+        out(r'''
+    public:
+      void calc(double dt,
+                const VectorDouble32& Vm,
+                const std::vector<double>& iStim,
+                VectorDouble32& dVm);
+      void initializeMembraneVoltage(VectorDouble32& Vm);
+    private:
       std::vector<State> state_;
-      double __cachedDt;''', template)
+''',template)
     out.inc(2)
     out("Interpolation _interpolant[%d];" % fitCount)
     out.dec(2)
@@ -359,6 +402,7 @@ namespace scanReaction
 
     fitDependencies = model.allDependencies(good|polyfits,allfits) & good
     out(r'''
+      bool reusingInterpolants = false;
       string fitName;
       objectGet(obj, "fit", fitName, "");
       int funcCount = sizeof(reaction->_interpolant)/sizeof(reaction->_interpolant[0]);
@@ -394,11 +438,13 @@ namespace scanReaction
                   objectGet(funcObj, "denom", reaction->_interpolant[_ii].numDenom_, "-1");
                   objectGet(funcObj, "coeff", reaction->_interpolant[_ii].coeff_);
                }
-               return reaction;
+               reusingInterpolants = true;
             }
          }
       }
 
+      if (!reusingInterpolants)
+      {
       reaction->createInterpolants(_dt);
 
       //save the interpolants
@@ -410,12 +456,12 @@ namespace scanReaction
          outfile << obj->name << " REACTION { fit=" << fitName << "; }\n";
          outfile << fitName << " FIT {\n";''' % template)
 
-    out.inc(3)
+    out.inc(4)
     if dt in fitDependencies:
         out(r'outfile << "   dt = " << _dt << ";\n";')
     for var in order(fitDependencies-set([dt])):
         out(r'outfile << "   %s = " << reaction->%s << ";\n";', var, var)
-    out.dec(3)
+    out.dec(4)
     out(r'''
          outfile << "   functions = ";
          for (int _ii=0; _ii<funcCount; _ii++) {
@@ -438,6 +484,12 @@ namespace scanReaction
          }
          outfile.close();
       }
+      }''',template)
+    if arch=="nvidia":
+        out.inc(2)
+        out("reaction->constructKernel();")
+        out.dec(2)
+    out('''
       return reaction;
    }
 #undef setDefault
@@ -446,20 +498,6 @@ namespace scanReaction
 
 namespace %(target)s 
 {
-   
-string ThisReaction::methodName() const
-{
-   return "%(target)s";
-}
-   
-ThisReaction::ThisReaction(const int numPoints, const double __dt)
-: nCells_(numPoints)
-{
-   state_.resize(nCells_);
-   perCellFlags_.resize(nCells_);
-   perCellParameters_.resize(nCells_);
-   __cachedDt = __dt;
-}
 
 void ThisReaction::createInterpolants(const double _dt) {
 ''', template)
@@ -509,21 +547,232 @@ if (actualTolerance > relError  && getRank(0) == 0)
         out("}")
     out.dec()
     out('''
+}''',template)
+    if arch=="nvidia":
+        out(r'''
+void generateInterpString(stringstream& ss, const Interpolation& interp, const char* interpVar)
+{
+   ss <<
+   "{\n"
+   "   const double _numerCoeff[]={";
+    for (int _ii=interp.numNumer_-1; _ii>=0; _ii--)
+   {
+      if (_ii != interp.numNumer_-1) { ss << ", "; }
+      ss << interp.coeff_[_ii];
+   }
+   ss<< "};\n"
+   "   const double _denomCoeff[]={";
+   for (int _ii=interp.numDenom_+interp.numNumer_-2; _ii>=interp.numNumer_; _ii--)
+   {
+      ss << interp.coeff_[_ii] << ", ";
+   }
+   ss<< "1};\n"
+   "   double _inVal = " << interpVar << ";\n"
+   "   double _numerator=_numerCoeff[0];\n"
+   "   for (int _jj=1; _jj<sizeof(_numerCoeff)/sizeof(_numerCoeff[0]); _jj++)\n"
+   "   {\n"
+   "      _numerator = _numerCoeff[_jj] + _inVal*_numerator;\n"
+   "   }\n"
+   "   if (sizeof(_denomCoeff)/sizeof(_denomCoeff[0]) == 1)\n"
+   "   {\n"
+   "      _ratPoly = _numerator;\n"
+   "   }\n"
+   "   else\n"
+   "   {\n"
+   "      double _denominator=_denomCoeff[0];\n"
+   "      for (int _jj=1; _jj<sizeof(_denomCoeff)/sizeof(_denomCoeff[0]); _jj++)\n"
+   "      {\n"
+   "         _denominator = _denomCoeff[_jj] + _inVal*_denominator;\n"
+   "      }\n"
+   "      _ratPoly = _numerator/_denominator;\n"
+   "   }\n"
+   "}"
+      ;
+}
+
+void ThisReaction::constructKernel()
+{
+
+   stringstream ss;
+   ss.precision(16);
+   ss <<
+   "enum StateOffset {\n"
+''',template)
+        out.inc()
+        for var in order(diffvars):
+            out(r'"   %s_off,\n"',var)
+        out.dec()
+        out(r'''
+   "   NUMSTATES\n"
+   "};\n"
+   "extern \"C\"\n"
+   "__global__ void %(target)s_kernel(const double* _Vm, const double* _iStim, double* _dVm, double* _state) {\n"
+   "const double _dt = " << __cachedDt << ";\n"
+   "const int _nCells = " << nCells_ << ";\n"
+''',template)
+
+
+        out.inc(1)
+        for var in order(params):
+            out(r'"const double %s = " << %s << ";\n"',var,var)
+        out.dec(1)
+        out(r'''
+   "const int _ii = threadIdx.x + blockIdx.x*blockDim.x;\n"
+   "if (_ii >= _nCells) { return; }\n"
+   "const double V = _Vm[_ii];\n"
+   "double _ratPoly;\n"
+''',template)
+        out.inc(1)
+        for var in order(diffvars):
+            out(r'"const double %s = _state[_ii+%s_off*_nCells];\n"',var,var)
+
+        good |= diffvars
+        good.add(V)
+
+        calcCodeBuf = io.BytesIO()
+        calcOut = utility.Indenter(calcCodeBuf)
+        iprinter = InterpolatePrintNvidiaVisitor(calcOut, model.ssa, params, interps)
+        model.printSet(model.allDependencies(good|allfits,computeTargets)-good, iprinter)
+        for line in calcCodeBuf.getvalue().splitlines():
+            out('"'+line+r'\n"')
+
+        out(r'"\n\n//EDIT STATE\n"')
+        for var in order(diffvars-gates):
+            out(r'"_state[_ii+%s_off*_nCells] += _dt*%s;\n"',var,diffvarUpdate[var])
+        for var in order(gates):
+            (RLA,RLB) = gateTargets[var]
+            out(r'"_state[_ii+%(v)s_off*_nCells] = %(a)s*%(v)s + %(b)s;\n"',
+            v=var,
+            a=RLA,
+            b=RLB,
+        )
+        out(r'"_dVm[_ii] = -%s;\n"', Iion)
+        out.dec()
+        out(r'''
+   "}\n";
+
+   _program_code = ss.str();
+   //cout << ss.str();
+   nvrtcCreateProgram(&_program,
+                      _program_code.c_str(),
+                      "%(target)s_program",
+                      0,
+                      NULL,
+                      NULL);
+   nvrtcCompileProgram(_program,
+                       0,
+                       NULL);
+   std::size_t size;
+   nvrtcGetPTXSize(_program, &size);
+   _ptx.resize(size);
+   nvrtcGetPTX(_program, &_ptx[0]);
+
+   cuModuleLoadDataEx(&_module, &_ptx[0], 0, 0, 0);
+   cuModuleGetFunction(&_kernel, _module, "%(target)s_kernel");
+}
+
+void ThisReaction::calc(double dt,
+                const Managed<ArrayView<double>> Vm_m,
+                const Managed<ArrayView<double>> iStim_m,
+                Managed<ArrayView<double>> dVm_m)
+{
+   ArrayView<double> state = stateTransport_.modifyOnDevice();
+
+   {
+      int errorCode=-1;
+      if (blockSize_ == -1) { blockSize_ = 1024; }
+      while(1)
+      {
+         ConstArrayView<double> Vm = Vm_m.readOnDevice();
+         ConstArrayView<double> iStim = iStim_m.readOnDevice();
+         ArrayView<double> dVm = dVm_m.modifyOnDevice();
+         double* VmRaw = const_cast<double*>(&Vm[0]);
+         double* iStimRaw = const_cast<double*>(&iStim[0]);
+         double* dVmRaw = &dVm[0];
+         double* stateRaw= &state[0];
+         void* args[] = { &VmRaw,
+                          &iStimRaw,
+                          &dVmRaw,
+                          &stateRaw};
+         int errorCode = cuLaunchKernel(_kernel,
+                                        (nCells_+blockSize_-1)/blockSize_, 1, 1,
+                                        blockSize_,1,1,
+                                        0, NULL,
+                                        args, 0);
+         if (errorCode == CUDA_ERROR_LAUNCH_OUT_OF_RESOURCES && blockSize_ > 0)
+         {
+            blockSize_ /= 2;
+            continue;
+         }
+         else if (errorCode != CUDA_SUCCESS)
+         {
+            printf("Cuda return %%d;\n", errorCode);
+            assert(0 && "Launch failed");
+         }
+         else
+         {
+            break;
+         }
+         //cuCtxSynchronize();
+      }
+   }
+}
+
+enum StateOffset {''', template)
+        out.inc()
+        for var in order(diffvars):
+            out("_%s_off,",var)
+        out.dec()
+        out('''
+   NUMSTATES
+};
+
+ThisReaction::ThisReaction(const int numPoints, const double __dt)
+: nCells_(numPoints)
+{
+   stateTransport_.setup(PinnedVector<double>(nCells_*NUMSTATES));
+   __cachedDt = __dt;
+   blockSize_ = -1;
+   _program = NULL;
+   _module = NULL;
+}
+
+ThisReaction::~ThisReaction() {
+   if (_program)
+   {
+      nvrtcDestroyProgram(&_program);
+      _program = NULL;
+   }
+   if (_module)
+   {
+      cuModuleUnload(_module);
+      _module = NULL;
+   }
+}
+
+''',template)
+    else:
+        out('''
+ThisReaction::ThisReaction(const int numPoints, const double __dt)
+: nCells_(numPoints)
+{
+   state_.resize(nCells_);
+   __cachedDt = __dt;
 }
 
 void ThisReaction::calc(double _dt, const VectorDouble32& __Vm,
                        const vector<double>& __iStim , VectorDouble32& __dVm)
 {
    //define the constants''', template)
-    out.inc()
+        out.inc()
 
-    iprinter = InterpolatePrintVisitor(out, model.ssa, params, interps)
-    model.printTarget(good,computeAllDepend&constants,iprinter)
+        iprinter = InterpolatePrintCPUVisitor(out, model.ssa, params, interps)
+        model.printTarget(good,computeAllDepend&constants,iprinter)
 
-    good |= constants
+        good |= constants
     
-    out.dec()
-    out('''
+        out.dec()
+        out('''
    for (unsigned __ii=0; __ii<nCells_; ++__ii)
    {
       //set Vm
@@ -531,42 +780,49 @@ void ThisReaction::calc(double _dt, const VectorDouble32& __Vm,
       const double iStim = __iStim[__ii];
 
       //set all state variables''', template)
-    out.inc(2)
-    for var in order(diffvars):
-        out('const double %s=state_[__ii].%s;',var,var)
-    good |= diffvars
-    good.add(V)
+        out.inc(2)
+        for var in order(diffvars):
+            out('const double %s=state_[__ii].%s;',var,var)
+        good |= diffvars
+        good.add(V)
 
-    model.printSet(model.allDependencies(good|allfits,computeTargets)-good, iprinter)
+        model.printSet(model.allDependencies(good|allfits,computeTargets)-good, iprinter)
     
-    out.dec(2)
-    out(r'''
+        out.dec(2)
+        out(r'''
       
       //EDIT_STATE''', template)
-    out.inc(2)
-    for var in order(diffvars-gates):
-        out('state_[__ii].%s += _dt*%s;',var,diffvarUpdate[var])
-    for var in order(gates):
-        (RLA,RLB) = gateTargets[var]
-        out('state_[__ii].%(v)s = %(a)s*%(v)s + %(b)s;',
-            v=var,
-            a=RLA,
-            b=RLB,
-        )
+        out.inc(2)
+        for var in order(diffvars-gates):
+            out('state_[__ii].%s += _dt*%s;',var,diffvarUpdate[var])
+        for var in order(gates):
+            (RLA,RLB) = gateTargets[var]
+            out('state_[__ii].%(v)s = %(a)s*%(v)s + %(b)s;',
+                v=var,
+                a=RLA,
+                b=RLB,
+            )
                      
-    out.dec(2)
-    out('''      
+        out.dec(2)
+        out('''      
       __dVm[__ii] = -Iion;
    }
-}
+}''',template)
+    out('''
 
+   
+string ThisReaction::methodName() const
+{
+   return "%(target)s";
+}
+   
 void ThisReaction::initializeMembraneVoltage(VectorDouble32& __Vm)
 {
    assert(__Vm.size() >= nCells_);
 
 ''', template)
     out.inc()
-
+    
     cprinter = CPrintVisitor(out, model.ssa, params)
     good = set()
     good |= params
@@ -576,23 +832,28 @@ void ThisReaction::initializeMembraneVoltage(VectorDouble32& __Vm)
     good.add(V)
     out("double V = V_init;") #FIXME, possibly make more general?
     model.printTarget(good,diffvars,cprinter)
-    
-    out.dec()
-    out('''      
 
-   State __initState;
-''', template)
+    if arch=="nvidia":
+        def stateName(var,index):
+            return "stateData[_%s_off*nCells_+%s]" % (var,index)
+    else:
+        def stateName(var,index):
+            return "state_[%s].%s" % (index,var)
+    
+    if arch=="nvidia":
+        out("ArrayView<double> stateData = stateTransport_;")
+    else:
+        out("state_.resize(nCells_);")
+    out(r'for (int iCell=0; iCell<nCells_; iCell++)')
+    out('{')
     out.inc()
     for var in order(diffvars):
-        out('__initState.%s = %s;',var,var)
-    out.dec()
-    out('''      
-   
+        out("%s = %s;",stateName(var,"iCell"),var)
+    out.dec(2)
+    out('''
+   }
 
    __Vm.assign(__Vm.size(), V_init);
-
-   state_.resize(nCells_);
-   state_.assign(state_.size(), __initState);
 }
 
 enum varHandles
@@ -621,7 +882,6 @@ const string ThisReaction::getUnit(const std::string& varName) const
    return "INVALID";
 }
 
-#define HANDLE_OFFSET 1000
 int ThisReaction::getVarHandle(const std::string& varName) const
 {
    if (0) {}''', template)
@@ -635,11 +895,13 @@ int ThisReaction::getVarHandle(const std::string& varName) const
 }
 
 void ThisReaction::setValue(int iCell, int varHandle, double value) 
-{
-   if (0) {}''', template)
+{''', template)
     out.inc()
+    if arch=="nvidia":
+        out("ArrayView<double> stateData = stateTransport_;")
+    out("if (0) {}")
     for var in order(diffvars):
-        out('else if (varHandle == %s_handle) { state_[iCell].%s = value; }', var, var)
+        out('else if (varHandle == %s_handle) { %s = value; }', var, stateName(var,"iCell"))
     out.dec()
     out('''
 }
@@ -648,9 +910,11 @@ void ThisReaction::setValue(int iCell, int varHandle, double value)
 double ThisReaction::getValue(int iCell, int varHandle) const
 {''', template)
     out.inc()
-    out('if (0) {}')
+    if arch=="nvidia":
+        out("ConstArrayView<double> stateData = stateTransport_;")
+    out("if (0) {}")
     for var in order(diffvars):
-        out('else if (varHandle == %s_handle) { return state_[iCell].%s; }', var, var)
+        out('else if (varHandle == %s_handle) { return %s; }', var, stateName(var,"iCell"))
     out.dec()
     out('''
 
@@ -659,11 +923,12 @@ double ThisReaction::getValue(int iCell, int varHandle) const
 
 double ThisReaction::getValue(int iCell, int varHandle, double V) const
 {
-   ConstArrayView<double> stateData = stateTransport_;
 ''', template)
     out.inc()
+    if arch=="nvidia":
+        out("ConstArrayView<double> stateData = stateTransport_;")
     for var in order(diffvars):
-        out('const double %s=stateData[_%s_off*nCells_+iCell];',var,var)
+        out('const double %s=%s;',var,stateName(var,"iCell"))
     out('if (0) {}')
     for var in order(diffvars|tracevars):
         out('else if (varHandle == %s_handle)', var)
@@ -698,5 +963,7 @@ void ThisReaction::getCheckpointInfo(vector<string>& fieldNames,
 
 
 generators = {
-    frozenset(["cardioid"]) : generateCardioid,
+    frozenset(["cardioid"]) : lambda model, targetName : generateCardioid(model,targetName,"cpu"),
+    frozenset(["cardioid", "cpu"]) : lambda model, targetName : generateCardioid(model,targetName,"cpu"),
+    frozenset(["cardioid","nvidia"]) : lambda model, targetName : generateCardioid(model,targetName,"nvidia"), 
 }
