@@ -429,10 +429,16 @@ namespace scanReaction
       //override the defaults
       //EDIT_PARAMETERS''', template)
     out.inc(2)
+    for var in order(params):
+        out("double %s;", var)
     good = set([dt])
     paramPrinter = ParamPrintVisitor(out, model.ssa, params, params)
     model.printTarget(good, params, paramPrinter)
     good |= params
+
+    for var in order(params):
+        out("reaction->%s = %s;",var,var)
+    
     out.dec(2)
 
     fitDependencies = model.allDependencies(good|polyfits,allfits) & good
@@ -841,6 +847,11 @@ void ThisReaction::calc(double _dt, const VectorDouble32& __Vm,
         model.printSet(diffSet, iprinter)
         good |= diffSet
 
+        out("//get Iion")
+        IionSet = model.allDependencies(good|allfits,set([Iion]))-good
+        model.printSet(IionSet, iprinter)
+        good |= IionSet
+        
         out("//Do the markov update (1 step rosenbrock with gauss siedel)")
         for var in order(markovs):
             out("double %s = %s;",markovTargets[var],diffvarUpdate[var])
@@ -881,11 +892,12 @@ void ThisReaction::calc(double _dt, const VectorDouble32& __Vm,
                 b=RLB,
             )
         for var in order(markovs):
-            out("%s += _dt*%s;",var,markovTargets[var])
+            out("state_[__jj].%s += _dt*%s;",var,markovTargets[var])
                      
+        out("__dVm[__ii] = -%s;", Iion)
         out.dec(2)
-        out('''      
-      __dVm[__ii] = -Iion;
+
+        out('''
    }
 }''',template)
     else:
