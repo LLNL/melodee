@@ -295,12 +295,16 @@ def generateCardioid(model, targetName, arch="cpu"):
         pass
     else:
         assert(False)
-    out(r'''    
-namespace scanReaction 
+
+    if arch=="nvidia":
+        #FIXME
+        out(r'''
+namespace scanReaction
 {
     Reaction* scan%(target)s(OBJECT* obj, const int numPoints, const double __dt);
 }
-
+''')
+    out(r'''    
 namespace %(target)s
 {
 
@@ -360,7 +364,7 @@ namespace %(target)s
       void initializeMembraneVoltage(ArrayView<double> Vm);
       virtual ~ThisReaction();
       void constructKernel();
-    private:
+
       TransportCoordinator<PinnedVector<double> > stateTransport_;
       std::string _program_code;
       nvrtcProgram _program;
@@ -377,16 +381,18 @@ namespace %(target)s
                 const std::vector<double>& iStim,
                 VectorDouble32& dVm);
       void initializeMembraneVoltage(VectorDouble32& Vm);
-    private:
+
       std::vector<State> state_;
 ''',template)
     else:
         assert(False)
     out.inc(2)
     out("Interpolation _interpolant[%d];" % fitCount)
+    if arch=="nvidia":
+        #FIXME
+        out('friend Reaction* scanReaction::scan%(target)s(OBJECT* obj, const int numPoints, const double __dt);')
     out.dec(2)
-    out('''
-      friend Reaction* scanReaction::scan%(target)s(OBJECT* obj, const int numPoints, const double __dt);
+    out('''      
    };
 }
 
@@ -417,12 +423,20 @@ namespace %(target)s
 
 using namespace std;
 
-namespace scanReaction 
-{
-
 #define setDefault(name, value) objectGet(obj, #name, reaction->name, #value)
    
-   Reaction* scan%(target)s(OBJECT* obj, const int numPoints, const double _dt)
+''',template)
+    if arch=="nvidia":
+        #FIXME
+        out(r'''
+namespace scanReaction
+{
+
+        Reaction* scan%(target)s(OBJECT* obj, const int numPoints, const double _dt)''',template)
+    else:
+        out('#include "reactionFactory.hh"')
+        out("REACTION_FACTORY(%(target)s)(OBJECT* obj, const int numPoints, const double _dt, const ThreadTeam& group)",template)
+    out(r'''
    {
       %(target)s::ThisReaction* reaction = new %(target)s::ThisReaction(numPoints, _dt);
 
@@ -538,8 +552,11 @@ namespace scanReaction
       return reaction;
    }
 #undef setDefault
-
-}
+    ''',template)
+    if arch=="nvidia":
+        #FIXME
+        out("}")
+    out(r'''
 
 namespace %(target)s 
 {
