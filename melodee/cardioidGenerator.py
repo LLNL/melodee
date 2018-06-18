@@ -883,9 +883,9 @@ void ThisReaction::calc(double _dt, const VectorDouble32& __Vm,
             out("double %s = %s;",markovOld[var], markovTargets[var])
         markovGoals = set(markovOld.values())
         good |= markovGoals
-        cprinter.declaredStack[-1] |= set(["%s" % var for var in markovTargets.values()])
+        iprinter.declaredStack[-1] |= set(["%s" % var for var in markovTargets.values()])
         markovSet = model.allDependencies(good,set(markovTargets.values()))
-        model.printSet(markovSet,cprinter)
+        model.printSet(markovSet,iprinter)
 
         out("_error = 0;")
         for var in order(markovs):
