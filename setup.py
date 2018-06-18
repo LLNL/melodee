@@ -17,7 +17,7 @@ setup(
           'Programming Language :: Python 3',
       ],
       url='https://github.com/llnl/melodee',
-      author='Robert Clayton Blake III',
+      author='Robert Blake',
       author_email='blake14@llnl.gov',
       license='Apache-2.0',
       packages=['melodee'],
@@ -29,7 +29,7 @@ setup(
       zip_safe=False,
       entry_points = {
           'console_scripts' : ['melodee=melodee.main:main',
-                               'cellml2melode=melodee.cellmlConverter:main',
+                               'cellml2melodee=melodee.cellmlConverter:main',
           ]
       },
 )
