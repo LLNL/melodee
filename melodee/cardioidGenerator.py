@@ -178,7 +178,7 @@ def generateCardioid(model, targetName, arch="cpu",interp=True):
 
     diffvars = model.diffvars()
     diffvarUpdate = {var : model.diffvarUpdate(var) for var in diffvars}
-    params = model.varsWithAttribute("param")
+    params = model.varsWithAttribute("param") | model.varsWithAttribute("flag")
     markovs = model.varsWithAttribute("markov") & diffvars
     gates = model.varsWithAttribute("gate") & diffvars
     if interp:
