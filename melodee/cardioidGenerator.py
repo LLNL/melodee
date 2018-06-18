@@ -49,7 +49,7 @@ class MyCCodeSympyPrinter(C99CodePrinter):
             return 'sqrt(%s)' % self._print(expr.base)
         elif expr.exp == 1:
             return self.parenthesize(expr.base,PREC)
-        elif expr.exp.is_constant and int(expr.exp) == expr.exp:
+        elif expr.exp.is_constant() and int(expr.exp) == expr.exp:
             base = self.parenthesize(expr.base,PREC)
             if expr.exp > 0:
                 return "(" + "*".join(repeat(base,int(expr.exp))) + ")"
@@ -172,7 +172,7 @@ class InterpolatePrintNvidiaVisitor(CPrintVisitor):
         if lhs in self.interps:
             self.equationPrint(lhs,None)
 
-def generateCardioid(model, targetName, arch="cpu"):
+def generateCardioid(model, targetName, arch="cpu",interp=True):
     template = {}
     template["target"] = targetName
 
@@ -181,7 +181,10 @@ def generateCardioid(model, targetName, arch="cpu"):
     params = model.varsWithAttribute("param")
     markovs = model.varsWithAttribute("markov") & diffvars
     gates = model.varsWithAttribute("gate") & diffvars
-    polyfits = model.varsWithAttribute("interp")
+    if interp:
+        polyfits = model.varsWithAttribute("interp")
+    else:
+        polyfits = set()
     tracevars = model.varsWithAttribute("trace")
     nointerps = model.varsWithAttribute("nointerp")
     
@@ -241,7 +244,7 @@ def generateCardioid(model, targetName, arch="cpu"):
         computeTargets.add(markovTargets[markov])
 
     approxvars = set([dt])
-    statevars = model.inputs()|diffvars
+    statevars = model.inputs()|diffvars|set(markovOld.values())
     computeAllDepend = model.allDependencies(approxvars|statevars|params, computeTargets)
 
     constants = model.allExcluding(approxvars, statevars) & computeAllDepend
@@ -862,13 +865,13 @@ void ThisReaction::calc(double _dt, const VectorDouble32& __Vm,
             gateGoals.add(RLA)
             gateGoals.add(RLB)
         good.add(dt)
-        gateSet = model.allDependencies(good,gateGoals)-good
+        gateSet = model.allDependencies(good|allfits,gateGoals)-good
         model.printSet(gateSet,iprinter)
         good |= gateSet
 
         out("//get the other differential updates")
         diffGoals = set([diffvarUpdate[var] for var in diffvars-gates])
-        diffSet = model.allDependencies(good,diffGoals)-good
+        diffSet = model.allDependencies(good|allfits,diffGoals)-good
         model.printSet(diffSet, iprinter)
         good |= diffSet
 
@@ -892,7 +895,7 @@ void ThisReaction::calc(double _dt, const VectorDouble32& __Vm,
         markovGoals = set(markovOld.values())
         good |= markovGoals
         iprinter.declaredStack[-1] |= set(["%s" % var for var in markovTargets.values()])
-        markovSet = model.allDependencies(good,set(markovTargets.values()))
+        markovSet = model.allDependencies(good|allfits,set(markovTargets.values()))
         model.printSet(markovSet,iprinter)
 
         out("_error = 0;")
@@ -1100,5 +1103,6 @@ void ThisReaction::getCheckpointInfo(vector<string>& fieldNames,
 generators = {
     frozenset(["cardioid"]) : lambda model, targetName : generateCardioid(model,targetName,"cpu"),
     frozenset(["cardioid", "cpu"]) : lambda model, targetName : generateCardioid(model,targetName,"cpu"),
-    frozenset(["cardioid","nvidia"]) : lambda model, targetName : generateCardioid(model,targetName,"nvidia"), 
+    frozenset(["cardioid","nvidia"]) : lambda model, targetName : generateCardioid(model,targetName,"nvidia"),
+    frozenset(["cardioid", "nointerp"]) : lambda model, targetName : generateCardioid(model,targetName,"cpu",interp=False)
 }

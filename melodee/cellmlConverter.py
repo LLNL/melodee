@@ -548,7 +548,7 @@ def parseUnits(units, unitElements):
                     else:
                         thisName = name
                     thisUnit[thisName] = thisUnit.get(thisName,0) + subExp*exponent
-                assert(appliedPrefix)
+                assert(not prefix or appliedPrefix)
             units[unitElement.get("name")] = thisUnit
 
 units = {
