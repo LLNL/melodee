@@ -90,7 +90,7 @@ class ConsolidatedSystem:
             for inst in instructions:
                 if isinstance(inst, IfInstruction) and instructionsInList([inst]) & allUpdate:
                     ifVar = inst.ifVar
-                    if inst.ifVar not in allUpdate:
+                    if False and inst.ifVar not in allUpdate:
                         printVisitor.ifPrint(printer, None, None, None, inst.choiceInstructions)
                     else:
                         printVisitor.ifPrint(printer, inst.ifVar, inst.thenInstructions, inst.elseInstructions, inst.choiceInstructions)

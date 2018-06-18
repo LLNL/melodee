@@ -423,7 +423,15 @@ namespace %(target)s
 
 using namespace std;
 
-#define setDefault(name, value) objectGet(obj, #name, reaction->name, #value)
+#define setDefault(name, value) objectGet(obj, #name, name, TO_STRING(value))
+
+template<typename TTT>
+static inline string TO_STRING(const TTT x)
+{
+   stringstream ss;
+   ss << x;
+   return ss.str();
+}
    
 ''',template)
     if arch=="nvidia":
