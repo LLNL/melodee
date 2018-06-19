@@ -705,20 +705,66 @@ void ThisReaction::constructKernel()
         calcCodeBuf = io.BytesIO()
         calcOut = utility.Indenter(calcCodeBuf)
         iprinter = InterpolatePrintNvidiaVisitor(calcOut, model.ssa, params, interps)
-        model.printSet(model.allDependencies(good|allfits,computeTargets)-good, iprinter)
+        calcOut("//get the gate updates (diagonalized exponential integrator)")
+        gateGoals = set()
+        for RLA,RLB in gateTargets.values():
+            gateGoals.add(RLA)
+            gateGoals.add(RLB)
+        good.add(dt)
+        gateSet = model.allDependencies(good|allfits,gateGoals)-good
+        model.printSet(gateSet,iprinter)
+        good |= gateSet
+
+        calcOut("//get the other differential updates")
+        diffGoals = set([diffvarUpdate[var] for var in diffvars-gates])
+        diffSet = model.allDependencies(good|allfits,diffGoals)-good
+        model.printSet(diffSet, iprinter)
+        good |= diffSet
+
+        calcOut("//get Iion")
+        IionSet = model.allDependencies(good|allfits,set([Iion]))-good
+        model.printSet(IionSet, iprinter)
+        good |= IionSet
+        
+        calcOut("//Do the markov update (1 step rosenbrock with gauss siedel)")
+        for var in order(markovs):
+            calcOut("double %s = %s;",markovTargets[var],diffvarUpdate[var])
+        calcOut("int _count=0;")
+        calcOut("do")
+        calcOut("{")
+        calcOut.inc()
+        iprinter.pushStack()
+
+        for var in order(markovs):
+            calcOut("double %s = %s;",markovOld[var], markovTargets[var])
+        markovGoals = set(markovOld.values())
+        good |= markovGoals
+        iprinter.declaredStack[-1] |= set(["%s" % var for var in markovTargets.values()])
+        markovSet = model.allDependencies(good|allfits,set(markovTargets.values()))
+        model.printSet(markovSet,iprinter)
+
+        calcOut("_count++;")
+
+        iprinter.popStack()
+        calcOut.dec()
+        calcOut("} while (_count<50);")
+
+        calcOut("//EDIT_STATE")
+        for var in order(diffvars-gates-markovs):
+            calcOut('_state[_ii+%s_off*_nCells] += _dt*%s;',var,diffvarUpdate[var])
+        for var in order(gates):
+            (RLA,RLB) = gateTargets[var]
+            calcOut('_state[_ii+%(v)s_off*_nCells] += %(a)s*(%(v)s+%(b)s);',
+                v=var,
+                a=RLA,
+                b=RLB,
+            )
+        for var in order(markovs):
+            calcOut("_state[_ii+%s_off*_nCells] += _dt*%s;",var,markovTargets[var])
+
         for line in calcCodeBuf.getvalue().splitlines():
             out('"'+line+r'\n"')
 
-        out(r'"\n\n//EDIT STATE\n"')
-        for var in order(diffvars-gates):
-            out(r'"_state[_ii+%s_off*_nCells] += _dt*%s;\n"',var,diffvarUpdate[var])
-        for var in order(gates):
-            (RLA,RLB) = gateTargets[var]
-            out(r'"_state[_ii+%(v)s_off*_nCells] += %(a)s*(%(v)s+%(b)s);\n"',
-            v=var,
-            a=RLA,
-            b=RLB,
-        )
         out(r'"_dVm[_ii] = -%s;\n"', Iion)
         out.dec()
         out(r'''
