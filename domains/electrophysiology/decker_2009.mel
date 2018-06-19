@@ -1,0 +1,565 @@
+integrate time {ms};
+
+shared V {mV};
+shared V_init {mV};
+shared Iion {uA/uF};
+
+subsystem decker_2009 {
+
+   shared VEK {mV};
+   shared AF {uF*mol/C};
+   shared Acap {cm^2};
+   shared CT_K_Cl {mmol/L/ms};
+   shared CT_Na_Cl {mmol/L/ms};
+   shared CaMK_active {1};
+   shared Ca_JSR {mmol/L};
+   shared Ca_NSR {mmol/L};
+   shared Ca_i {mmol/L};
+   shared Ca_ss_CaL {mmol/L};
+   shared Ca_ss_sr {mmol/L};
+   shared Cl_i {mmol/L};
+   shared Cl_ss {mmol/L};
+   shared ECl {mV};
+   shared EK {mV};
+   shared EKs {mV};
+   shared ENa {mV};
+   shared ICaL {uA/uF};
+   shared ICab {uA/uF};
+   shared IClb {uA/uF};
+   shared IK1 {uA/uF};
+   shared IKp {uA/uF};
+   shared IKr {uA/uF};
+   shared IKs {uA/uF};
+   shared INa {uA/uF};
+   shared INaCa {uA/uF};
+   shared INaCa_ss_sr {uA/uF};
+   shared INaK {uA/uF};
+   shared INaL {uA/uF};
+   shared INab {uA/uF};
+   shared I_stim {uA/uF};
+   shared Ileak {mmol/L/ms};
+   shared IpCa {uA/uF};
+   shared Irel {mmol/L/ms};
+   shared Ito1 {uA/uF};
+   shared Ito2 {uA/uF};
+   shared Itr {mmol/L/ms};
+   shared Iup {mmol/L/ms};
+   shared K_i {mmol/L};
+   shared Na_i {mmol/L};
+   shared Na_ss_sr {mmol/L};
+   shared Vjsr {uL};
+   shared Vm {mV};
+   shared Vmyo {uL};
+   shared Vnsr {uL};
+   shared Vsr {uL};
+   shared Vss_CaL {uL};
+   shared Vss_sr {uL};
+   shared i_Stim {uA/uF};
+   shared Ca_o {mmol/L};
+   shared Cl_o {mmol/L};
+   shared F {C/mol};
+   shared K_o {mmol/L};
+   shared Km {mmol/L};
+   shared Na_o {mmol/L};
+   shared R {J/kmol/K};
+   shared T {K};
+   shared tau_diff {ms};
+   subsystem CaMK_active {
+      provides Km {mmol/L};
+      provides CaMK_active {1};
+      diffvar CaMK_trap {1};
+      CaMK_0 {1} = 0.05;
+      Km {mmol/L} = 0.0015;
+      alpha_CaMK {1/ms} = 0.05;
+      beta_CaMK {1/ms} = 0.00068;
+      CaMK_active {1} = (CaMK_0*(1-CaMK_trap)/(1+Km/Ca_ss_sr)+CaMK_trap);
+      CaMK_trap.init {1} = 0.0114911034744777;
+      CaMK_trap.diff = (alpha_CaMK*CaMK_active*(CaMK_active-CaMK_trap)-beta_CaMK*CaMK_trap);
+   }
+   subsystem ICaL {
+      provides ICaL {uA/uF};
+      diffvar @markov C {1};
+      diffvar @markov CI {1};
+      diffvar @markov CI_star {1};
+      diffvar @markov C_star {1};
+      diffvar @markov O {1};
+      diffvar @markov OI {1};
+      diffvar @markov O_star {1};
+      ACT_infinity {1} = 1/(1+exp(-(Vm-13.56)/9.45));
+      ACT_tau {ms} = (0.59+0.8*exp(0.052*(Vm+13))/(1+exp(0.132*(Vm+13))));
+      IV_beta_infinity_star {1} = (25-17.5/(1+pow(0.003/Ca_ss_CaL,4)));
+      IV_infinity {1} = (1/(1+exp((Vm+17.5)/3))+0.25)/1.25;
+      IV_infinity_star {1} = (1/(1+exp((Vm+17.5)/3))+0.0001)/1.0001;
+      IV_tau {ms} = 1/(1/(24.828*(1+exp((Vm+49.1)/10.349)))+1/(30.553*(1+exp(-(Vm+0.213)/10.807))));
+      OI_star {1} = (1-(C+O+C_star+O_star+CI+OI+CI_star));
+      PCa {L/ms/F} = 0.00015552;
+      delta {1/ms} = 3/(1+pow(0.003/Ca_ss_CaL,4));
+      gamma_Cai {1} = 1;
+      gamma_Cao {1} = 0.341;
+      theta {1/ms} = 1;
+      theta_I {1/ms} = 1e-6;
+      ICaL_max {uA/uF} = PCa*4*Vm*pow(F,2)/(R*T)*(gamma_Cai*Ca_ss_CaL*exp(2*Vm*F/(R*T))-gamma_Cao*Ca_o)/(exp(2*Vm*F/(R*T))-1);
+      IV_beta_star {1} = 1/(IV_beta_infinity_star*(1+exp(-(Vm+0.213)/10.807)));
+      alpha {1/ms} = ACT_infinity/ACT_tau;
+      beta {1/ms} = (1-ACT_infinity)/ACT_tau;
+      x {1/ms} = IV_infinity/IV_tau;
+      y {1/ms} = (1-IV_infinity)/IV_tau;
+      C.init {1} = 0.99996982093287;
+      C.diff = (-(alpha+delta+y)*C+beta*O+theta*C_star+x*CI);
+      ICaL {uA/uF} = ICaL_max*(O+O_star);
+      IV_tau_star {ms} = 1/(1/(24.828*(1+exp((Vm+49.1)/10.349)))+IV_beta_star);
+      O.init {1} = 2.26882961412491e-5;
+      O.diff = (-(beta+delta+y)*O+alpha*C+theta*O_star+x*OI);
+      x_star {1/ms} = IV_infinity_star/IV_tau_star;
+      y_star {1/ms} = (1-IV_infinity_star)/IV_tau_star;
+      C_star.init {1} = 7.49117189549873e-6;
+      C_star.diff = (-(alpha+theta+y_star)*C_star+delta*C+beta*O_star+x_star*CI_star);
+      O_star.init {1} = 1.23556404128518e-10;
+      O_star.diff = (-(beta+theta+y_star)*O_star+delta*O+alpha*C_star+x_star*OI_star);
+      delta_I {1/ms} = theta_I*x*y_star*delta/(y*x_star*theta);
+      CI.init {1} = 5.89853003114132e-11;
+      CI.diff = (-(alpha+delta_I+x)*CI+y*C+theta_I*CI_star+beta*OI);
+      CI_star.init {1} = 1.9237001017021e-9;
+      CI_star.diff = (-(alpha+theta_I+x_star)*CI_star+delta_I*CI+y_star*C_star+beta*OI_star);
+      OI.init {1} = 8.01952813127322e-17;
+      OI.diff = (-(beta+delta_I+x)*OI+y*O+theta_I*OI_star+alpha*CI);
+   }
+   subsystem ICab {
+      provides ICab {uA/uF};
+      PCab {L/ms/F} = 1.99508e-7;
+      gamma_Ca_i {1} = 1;
+      gamma_Ca_o {1} = 0.341;
+      ICab {uA/uF} = PCab*4*Vm*pow(F,2)/(R*T)*(gamma_Ca_i*Ca_i*exp(2*Vm*F/(R*T))-gamma_Ca_o*Ca_o)/(exp(2*Vm*F/(R*T))-1);
+   }
+   subsystem INaCa {
+      provides INaCa {uA/uF};
+      provides INaCa_ss_sr {uA/uF};
+      KmCa_act {mmol/L} = 0.000125;
+      KmCai {mmol/L} = 0.0036;
+      KmCao {mmol/L} = 1.3;
+      KmNai {mmol/L} = 12.3;
+      KmNao {mmol/L} = 87.5;
+      Vmax {uA/uF} = 4.5;
+      eta {1} = 0.27;
+      ksat {1} = 0.32;
+      denom_1 {1} = (1+pow(KmCa_act/Ca_i,2));
+      denom_2 {1} = (1+ksat*exp((eta-1)*Vm*F/(R*T)));
+      denom_3 {mmol^4/L^4} = (KmCao*pow(Na_i,3)+pow(KmNao,3)*Ca_i+pow(KmNai,3)*Ca_o*(1+Ca_i/KmCai));
+      denom_4 {mmol^4/L^4} = (KmCai*pow(Na_o,3)*(1+pow(Na_i/KmNai,3))+pow(Na_i,3)*Ca_o+pow(Na_o,3)*Ca_i);
+      denom_ss_1 {1} = (1+pow(KmCa_act/Ca_ss_sr,2));
+      denom_ss_2 {1} = (1+ksat*exp((eta-1)*Vm*F/(R*T)));
+      denom_ss_3 {mmol^4/L^4} = (KmCao*pow(Na_ss_sr,3)+pow(KmNao,3)*Ca_ss_sr+pow(KmNai,3)*Ca_o*(1+Ca_ss_sr/KmCai));
+      denom_ss_4 {mmol^4/L^4} = (KmCai*pow(Na_o,3)*(1+pow(Na_ss_sr/KmNai,3))+pow(Na_ss_sr,3)*Ca_o+pow(Na_o,3)*Ca_ss_sr);
+      num_ss {uA*mmol^4/uF/L^4} = 0.2*Vmax*(pow(Na_ss_sr,3)*Ca_o*exp(eta*Vm*F/(R*T))-pow(Na_o,3)*Ca_ss_sr*exp((eta-1)*Vm*F/(R*T)));
+      numerator {uA*mmol^4/uF/L^4} = 0.8*Vmax*(pow(Na_i,3)*Ca_o*exp(eta*Vm*F/(R*T))-pow(Na_o,3)*Ca_i*exp((eta-1)*Vm*F/(R*T)));
+      INaCa_cai {uA/uF} = numerator/(denom_1*denom_2*(denom_3+denom_4));
+      INaCa_ss_sr {uA/uF} = num_ss/(denom_ss_1*denom_ss_2*(denom_ss_3+denom_ss_4));
+      INaCa {uA/uF} = (INaCa_cai+INaCa_ss_sr);
+   }
+   subsystem INaK {
+      provides INaK {uA/uF};
+      V_half {mV} = -92;
+      ibarnak {uA/uF} = 1.4;
+      kmko {mmol/L} = 1.5;
+      kmnai {mmol/L} = 2.6;
+      sigma {1} = 1;
+      PK {1} = K_o/(K_o+kmko);
+      PNa {1} = pow(Na_i/(Na_i+kmnai),3);
+      phi {1} = sigma*(Vm-V_half)*F/(R*T);
+      fv {1} = 1/(1+exp(-phi));
+      INaK {uA/uF} = ibarnak*fv*PK*PNa;
+   }
+   subsystem INab {
+      provides INab {uA/uF};
+      PNab {L/ms/F} = 3.2e-9;
+      phi {1} = F*Vm/(R*T);
+      INab {uA/uF} = F*PNab*phi*(Na_i*exp(phi)-Na_o)/(exp(phi)-1);
+   }
+   subsystem Ileak {
+      provides Ileak {mmol/L/ms};
+      nsrbar {mmol/L} = 15;
+      Ileak {mmol/L/ms} = 0.004375/nsrbar*Ca_NSR;
+   }
+   subsystem IpCa {
+      provides IpCa {uA/uF};
+      KmpCa {mmol/L} = 0.0005;
+      gpCa {uA/uF} = 0.0575;
+      IpCa {uA/uF} = gpCa*Ca_i/(KmpCa+Ca_i);
+   }
+   subsystem Ito2 {
+      provides Ito2 {uA/uF};
+      shared i2f {1};
+      subsystem Ito2_i2f_gate {
+         provides diffvar i2f {1};
+         alpha_i2f {1/ms} = 0.025/(1+exp((Vm+58)/5));
+         beta_i2f {1/ms} = 1/(5*(1+exp((Vm+19)/-9)));
+         tau_i2f {ms} = 8;
+         i2f_infinity {1} = alpha_i2f/(alpha_i2f+beta_i2f);
+         i2f.init {1} = 0.996044894628276;
+         i2f.diff = (i2f_infinity-i2f)/tau_i2f;
+      }
+      Ito2_max_scaling_factor {1} = 1;
+      PCl {L/ms/F} = 9e-7;
+      kCa_ito2 {mmol/L/ms} = 0.4;
+      zCl {1} = -1;
+      Ito2_max {uA/uF} = PCl*pow(zCl,2)*Vm*pow(F,2)/(R*T)*(Cl_i-Cl_o*exp(Vm*F/(R*T)))/(1-exp(Vm*F/(R*T)));
+      KCa_ito2 {1} = (1-1/(1+pow(Irel/kCa_ito2,2)));
+      Ito2 {uA/uF} = Ito2_max*Ito2_max_scaling_factor*i2f*KCa_ito2;
+   }
+   subsystem Itr {
+      provides Itr {mmol/L/ms};
+      tautr {ms} = 25;
+      Itr {mmol/L/ms} = (Ca_NSR-Ca_JSR)/tautr;
+   }
+   subsystem cell_geometry {
+      provides AF {uF*mol/C};
+      provides Acap {cm^2};
+      provides Vjsr {uL};
+      provides Vmyo {uL};
+      provides Vnsr {uL};
+      provides Vsr {uL};
+      provides Vss_CaL {uL};
+      provides Vss_sr {uL};
+      a {cm} = 0.0011;
+      l {cm} = 0.01;
+      ageo {cm^2} = (2*3.1415926535897932*a*a+2*3.1415926535897932*a*l);
+      vcell {uL} = 1000*3.1415926535897932*a*a*l;
+      Acap {cm^2} = ageo*2;
+      Vjsr {uL} = vcell*0.0048;
+      Vmyo {uL} = vcell*0.678;
+      Vnsr {uL} = vcell*0.0552;
+      Vsr {uL} = vcell*0.06;
+      Vss_CaL {uL} = vcell*0.002;
+      Vss_sr {uL} = vcell*0.02;
+      AF {uF*mol/C} = 1*1*Acap/(F*1);
+   }
+   subsystem model_parameters {
+      provides Ca_o {mmol/L};
+      provides Cl_o {mmol/L};
+      provides F {C/mol};
+      provides K_o {mmol/L};
+      provides Na_o {mmol/L};
+      provides R {J/kmol/K};
+      provides T {K};
+      Ca_o {mmol/L} = 1.8;
+      Cl_o {mmol/L} = 100;
+      F {C/mol} = 96485;
+      K_o {mmol/L} = 5.4;
+      Na_o {mmol/L} = 140;
+      R {J/kmol/K} = 8314;
+      T {K} = 310;
+   }
+   subsystem reversal_potentials {
+      provides ECl {mV};
+      provides EK {mV};
+      provides EKs {mV};
+      provides ENa {mV};
+      ECl {mV} = -R*T/F*log(Cl_o/Cl_i);
+      EK {mV} = R*T/F*log(K_o/K_i);
+      ENa {mV} = R*T/F*log(Na_o/Na_i);
+      prnak {1} = 0.01833;
+      EKs {mV} = R*T/F*log((K_o+prnak*Na_o)/(K_i+prnak*Na_i));
+   }
+   subsystem CT_K_Cl {
+      provides CT_K_Cl {mmol/L/ms};
+      CT_K_Cl_max {mmol/L/ms} = 1.77e-5;
+      CT_K_Cl {mmol/L/ms} = CT_K_Cl_max*(EK-ECl)/((EK+87.8251)-ECl);
+   }
+   subsystem CT_Na_Cl {
+      provides CT_Na_Cl {mmol/L/ms};
+      CT_Na_Cl_max {mmol/L/ms} = 2.46108e-5;
+      CT_Na_Cl {mmol/L/ms} = CT_Na_Cl_max*pow((ENa-ECl),4)/(pow((ENa-ECl),4)+pow(87.8251,4));
+   }
+   subsystem IClb {
+      provides IClb {uA/uF};
+      gClb {mS/uF} = 0.000225;
+      IClb {uA/uF} = gClb*(Vm-ECl);
+   }
+   subsystem IK1 {
+      provides IK1 {uA/uF};
+      shared K1 {1};
+      subsystem IK1_K1_gate {
+         provides K1 {1};
+         alpha_k1 {1} = 1.02/(1+exp(0.2385*((VEK)-59.215)));
+         beta_k1 {1} = (0.49124*exp(0.08032*((VEK)+5.476))+exp(0.06175*((VEK)-594.31)))/(1+exp(-0.5143*((VEK)+4.753)));
+         K1 {1} = alpha_k1/(alpha_k1+beta_k1);
+      }
+      g_K1_max {mS/uF} = 0.5;
+      gK1 {mS/uF} = g_K1_max*sqrt(K_o/5.4);
+      IK1 {uA/uF} = gK1*K1*(VEK);
+   }
+   subsystem IKp {
+      provides IKp {uA/uF};
+      Kp {1} = 1/(1+exp((7.488-Vm)/5.98));
+      gKp {mS/uF} = 0.00276;
+      IKp {uA/uF} = gKp*Kp*(VEK);
+   }
+   subsystem IKr {
+      provides IKr {uA/uF};
+      shared r {1};
+      shared xr {1};
+      subsystem IKr_r_gate {
+         provides r {1};
+         r {1} = 1/(1+exp((Vm+10)/15.4));
+      }
+      subsystem IKr_xr_gate {
+         provides diffvar @gate xr {1};
+         tau_xr {ms} = 1/(0.0006*(Vm-1.7384)/(1-exp(-0.136*(Vm-1.7384)))+0.0003*(Vm+38.3608)/(exp(0.1522*(Vm+38.3608))-1));
+         xr_infinity {1} = 1/(1+exp(-(Vm+10.085)/4.25));
+         xr.init {1} = 4.06959064407486e-6;
+         xr.diff = (xr_infinity-xr)/tau_xr;
+      }
+      gKr_max {mS/uF} = 0.0138542;
+      gKr {mS/uF} = gKr_max*sqrt(K_o/5.4);
+      IKr {uA/uF} = gKr*xr*r*(VEK);
+   }
+   subsystem IKs {
+      provides IKs {uA/uF};
+      diffvar @markov C1 {1};
+      diffvar @markov C10 {1};
+      diffvar @markov C11 {1};
+      diffvar @markov C12 {1};
+      diffvar @markov C13 {1};
+      diffvar @markov C14 {1};
+      diffvar @markov C15 {1};
+      diffvar @markov C2 {1};
+      diffvar @markov C3 {1};
+      diffvar @markov C4 {1};
+      diffvar @markov C5 {1};
+      diffvar @markov C6 {1};
+      diffvar @markov C7 {1};
+      diffvar @markov C8 {1};
+      diffvar @markov C9 {1};
+      diffvar @markov O1 {1};
+      O2 {1} = (1-(C1+C2+C3+C4+C5+C6+C7+C8+C9+C10+C11+C12+C13+C14+C15+O1));
+      alpha {1/ms} = 0.01486459798086*exp(0.02987730123588*Vm*F/(R*T));
+      beta {1/ms} = 0.08398631219983*exp(-0.05546105712664*Vm*F/(R*T));
+      delta {1/ms} = 0.0031173268874*exp(-0.42625451944376*Vm*F/(R*T));
+      eta {1/ms} = 0.07731990097331*exp(-0.06472612248871*Vm*F/(R*T));
+      gKs_max {mS/uF} = 0.0826;
+      gamma {1/ms} = 0.01460066118316*exp(0.24464953099645*Vm*F/(R*T));
+      omega {1/ms} = 0.7940545995864*exp(-0.08017378192977*Vm*F/(R*T));
+      psi {1/ms} = 0.58638228663014*exp(0.28205554331496*Vm*F/(R*T));
+      theta {1/ms} = 0.08953830641102;
+      C1.init {1} = 0.476679784307081;
+      C1.diff = (-4*alpha*C1+beta*C2);
+      C10.init {1} = 0.0138769647384953;
+      C10.diff = (-(2*alpha+2*delta)*C10+beta*C11+gamma*C7);
+      C11.init {1} = 0.00371438476499172;
+      C11.diff = (-(alpha+beta+gamma+2*delta)*C11+2*alpha*C10+2*beta*C12+2*gamma*C8+3*delta*C13);
+      C12.init {1} = 0.000248553788631871;
+      C12.diff = (-(2*beta+2*gamma+2*delta)*C12+alpha*C11+3*gamma*C9+3*delta*C14);
+      C13.init {1} = 0.000644426171899078;
+      C13.diff = (-(alpha+3*delta)*C13+beta*C14+gamma*C11);
+      C14.init {1} = 8.62495047666861e-5;
+      C14.diff = (-(beta+gamma+3*delta)*C14+alpha*C13+2*gamma*C12+4*delta*C15);
+      C15.init {1} = 1.12344645485893e-5;
+      C15.diff = (-(4*delta+theta)*C15+gamma*C14+eta*O1);
+      C2.init {1} = 0.255181042718489;
+      C2.diff = (-(3*alpha+beta+gamma)*C2+4*alpha*C1+2*beta*C3+delta*C6);
+      C3.init {1} = 0.0512272866698557;
+      C3.diff = (-(2*alpha+2*beta+2*gamma)*C3+3*alpha*C2+3*beta*C4+delta*C7);
+      C4.init {1} = 0.0045705849736195;
+      C4.diff = (-(alpha+3*beta+3*gamma)*C4+2*alpha*C3+4*beta*C5+delta*C8);
+      C5.init {1} = 0.000152923243503507;
+      C5.diff = (-(4*beta+4*gamma)*C5+alpha*C4+delta*C9);
+      C6.init {1} = 0.132814156809568;
+      C6.diff = (-(3*alpha+delta)*C6+beta*C7+gamma*C2);
+      C7.init {1} = 0.053324572164618;
+      C7.diff = (-(2*alpha+beta+gamma+delta)*C7+3*alpha*C6+2*beta*C8+2*gamma*C3+2*delta*C10);
+      C8.init {1} = 0.00713656414955778;
+      C8.diff = (-(alpha+2*beta+2*gamma+delta)*C8+2*alpha*C7+3*beta*C9+3*gamma*C4+2*delta*C11);
+      C9.init {1} = 0.000318368292970148;
+      C9.diff = (-(3*beta+3*gamma+delta)*C9+alpha*C8+4*gamma*C5+2*delta*C12);
+      O1.init {1} = 1.05292905767805e-5;
+      O1.diff = (-(eta+psi)*O1+omega*O2+theta*C15);
+      OKs {1} = (O1+O2);
+      gKs {mS/uF} = gKs_max*(1+0.6/(1+pow(3.8e-5/Ca_i,1.4)));
+      IKs {uA/uF} = gKs*OKs*(Vm-EKs);
+   }
+   subsystem INa {
+      provides INa {uA/uF};
+      shared h {1};
+      shared j {1};
+      shared m {1};
+      subsystem INa_h_gate {
+         provides diffvar @gate h {1};
+         ah {1/ms} = ((Vm >= -40) ? 0 : 0.135*exp((80+Vm)/-6.8));
+         bh {1/ms} = ((Vm >= -40) ? 1/(0.13*(1+exp((Vm+10.66)/-11.1))) : (3.56*exp(0.079*Vm)+3.1e5*exp(0.35*Vm)));
+         h.init {1} = 0.991354143386887;
+         h.diff = (ah*(1-h)-bh*h);
+      }
+      subsystem INa_j_gate {
+         provides diffvar @gate j {1};
+         aj {1/ms} = ((Vm >= -40) ? 0 : (-1.2714e5*exp(0.2444*Vm)-6.948e-5*exp(-0.04391*Vm))*(Vm+37.78)/(1+exp(0.311*(Vm+79.23))));
+         bj {1/ms} = ((Vm >= -40) ? 0.3*exp(-2.535e-7*Vm)/(1+exp(-0.1*(Vm+32))) : 0.1212*exp(-0.01052*Vm)/(1+exp(-0.1378*(Vm+40.14))));
+         j.init {1} = 0.99709036251243;
+         j.diff = (aj*(1-j)-bj*j);
+      }
+      subsystem INa_m_gate {
+         provides diffvar @gate m {1};
+         am {1/ms} = 0.32*(Vm+47.13)/(1-exp(-0.1*(Vm+47.13)));
+         bm {1/ms} = 0.08*exp(-Vm/11);
+         m.init {1} = 0.00101841101248412;
+         m.diff = (am*(1-m)-bm*m);
+      }
+      g_Na {mS/uF} = 9.075;
+      INa {uA/uF} = g_Na*pow(m,3)*h*j*(Vm-ENa);
+   }
+   subsystem INaL {
+      provides INaL {uA/uF};
+      shared hL {1};
+      shared mL {1};
+      subsystem INaL_hL_gate {
+         provides diffvar @gate hL {1};
+         hL_infinity {1} = 1/(1+exp((Vm+91)/6.1));
+         tau_hL {ms} = 600;
+         hL.init {1} = 0.319611809402137;
+         hL.diff = (hL_infinity-hL)/tau_hL;
+      }
+      subsystem INaL_mL_gate {
+         provides diffvar @gate mL {1};
+         amL {1/ms} = 0.32*(Vm+47.13)/(1-exp(-0.1*(Vm+47.13)));
+         bmL {1/ms} = 0.08*exp(-Vm/11);
+         mL.init {1} = 0.00101841101248412;
+         mL.diff = (amL*(1-mL)-bmL*mL);
+      }
+      gNaL {mS/uF} = 0.0065;
+      INaL {uA/uF} = gNaL*pow(mL,3)*hL*(Vm-ENa);
+   }
+   subsystem Irel {
+      provides diffvar Irel {mmol/L/ms};
+      K_beta {mmol/L} = 0.28;
+      Krel_infinity {mmol/L} = 1;
+      Krel_tau {mmol/L} = 0.0123;
+      beta_0 {ms} = 4.75;
+      delta_beta_0 {1} = 1;
+      h_beta {1} = 10;
+      h_rel {1} = 8;
+      kappa {uF*mmol/ms^2/uA/L} = 0.1125;
+      delta_beta_CaMK {1} = delta_beta_0/(1+pow(K_beta/(1*CaMK_active),h_beta));
+      beta_tau {ms} = beta_0*(1+delta_beta_CaMK);
+      alpha_rel {uF*mmol/uA/L/ms} = beta_tau*kappa;
+      tau_rel {ms} = beta_tau/(1+Krel_tau/Ca_JSR);
+      rel_infinity {mmol/L/ms} = ICaL*alpha_rel/(1+pow(Krel_infinity/Ca_JSR,h_rel));
+      Irel.init {mmol/L/ms} = 0.000714227102027745;
+      Irel.diff = -(rel_infinity+Irel)/tau_rel;
+   }
+   subsystem Ito1 {
+      provides Ito1 {uA/uF};
+      shared a {1};
+      shared i1f {1};
+      shared i1s {1};
+      subsystem Ito1_a_gate {
+         provides diffvar @gate a {1};
+         a_infinity {1} = 1/(1+exp((Vm+9.437)/-7.133));
+         alpha_a {1/ms} = 1/(1.2089*(1+exp((Vm-18.4099)/-29.3814)));
+         beta_a {1/ms} = 3.5/(1+exp((Vm+100)/29.3814));
+         tau_a {ms} = 1/(alpha_a+beta_a);
+         a.init {1} = 1.76776038804228e-5;
+         a.diff = (a_infinity-a)/tau_a;
+      }
+      subsystem Ito1_i1f_gate {
+         provides diffvar @gate i1f {1};
+         alpha_i1f {1/ms} = 0.025/(1+exp((Vm+58)/5));
+         beta_i1f {1/ms} = 1/(9.7953*(1+exp((Vm+19)/-9)));
+         i1f.init {1} = 0.997976503910799;
+         i1f.diff = (alpha_i1f*(1-i1f)-beta_i1f*i1f);
+      }
+      subsystem Ito1_i1s_gate {
+         provides diffvar @gate i1s {1};
+         alpha_i1s {1/ms} = 1/(250*(1+exp((Vm+60)/5)));
+         beta_i1s {1/ms} = 1/(9.7953*(1+exp((Vm+19)/-9)));
+         i1s.init {1} = 0.947581184798815;
+         i1s.diff = (alpha_i1s*(1-i1s)-beta_i1s*i1s);
+      }
+      gto1 {mS/uF} = 0.497458;
+      rto1 {1} = exp(Vm/550);
+      Ito1 {uA/uF} = gto1*pow(a,3)*i1f*i1s*rto1*(VEK);
+   }
+   subsystem Iup {
+      provides Iup {mmol/L/ms};
+      delta_iupCaMK_bar {1} = 0.75;
+      delta_kmPLB_bar {mmol/L} = 0.00017;
+      iupbar {mmol/L/ms} = 0.004375;
+      kmCaMK {mmol/L} = 0.15;
+      kmup {mmol/L} = 0.00092;
+      delta_iupCaMK {1} = delta_iupCaMK_bar*CaMK_active*1/(kmCaMK+CaMK_active*1);
+      delta_kmPLB {mmol/L} = delta_kmPLB_bar*CaMK_active*1/(kmCaMK+CaMK_active*1);
+      Iup {mmol/L/ms} = (delta_iupCaMK+1)*iupbar*Ca_i/((Ca_i+kmup)-delta_kmPLB);
+   }
+   subsystem Ca {
+      provides diffvar Ca_JSR {mmol/L};
+      provides diffvar Ca_NSR {mmol/L};
+      provides diffvar Ca_i {mmol/L};
+      provides diffvar Ca_ss_CaL {mmol/L};
+      provides diffvar Ca_ss_sr {mmol/L};
+      provides tau_diff {ms};
+      BSLmax {mmol/L} = 1.124;
+      BSRmax {mmol/L} = 0.047;
+      Ca_NSR.init {mmol/L} = 1.01475649943057;
+      Ca_NSR.diff = (Iup-(Ileak+Itr*Vjsr/Vnsr));
+      KmBSL {mmol/L} = 0.0087;
+      KmBSR {mmol/L} = 0.00087;
+      cmdn_bar {mmol/L} = 0.05;
+      csqnbar {mmol/L} = 10;
+      km_cmdn {mmol/L} = 0.00238;
+      km_trpn {mmol/L} = 0.0005;
+      kmcsqn {mmol/L} = 0.8;
+      tau_diff {ms} = 0.2;
+      tau_diff_ss {ms} = 2;
+      trpn_bar {mmol/L} = 0.07;
+      Idiff {mmol/L/ms} = (Ca_ss_sr-Ca_i)/tau_diff;
+      Idiff_ss {mmol/L/ms} = (Ca_ss_sr-Ca_ss_CaL)/tau_diff_ss;
+      bcsqn {1} = 1/(1+kmcsqn*csqnbar/pow((Ca_JSR+kmcsqn),2));
+      bmyo {1} = 1/(1+cmdn_bar*km_cmdn/pow((Ca_i+km_cmdn),2)+km_trpn*trpn_bar/pow((Ca_i+km_trpn),2));
+      bss_cal {1} = 1/(1+BSRmax*KmBSR/pow((KmBSR+Ca_ss_CaL),2)+BSLmax*KmBSL/pow((KmBSL+Ca_ss_CaL),2));
+      bss_sr {1} = 1/(1+BSRmax*KmBSR/pow((KmBSR+Ca_ss_sr),2)+BSLmax*KmBSL/pow((KmBSL+Ca_ss_sr),2));
+      Ca_JSR.init {mmol/L} = 0.993914988616979;
+      Ca_JSR.diff = bcsqn*(Itr-Irel);
+      Ca_i.init {mmol/L} = 8.38749860095482e-5;
+      Ca_i.diff = bmyo*(-((ICab+IpCa)-2*INaCa)*AF/(Vmyo*2)+(Ileak-Iup)*Vnsr/Vmyo+Idiff*Vss_sr/Vmyo);
+      Ca_ss_CaL.init {mmol/L} = 0.000119239795531548;
+      Ca_ss_CaL.diff = -bss_cal*(ICaL*AF/(2*Vss_CaL)-Idiff_ss*Vss_sr/Vss_CaL);
+      Ca_ss_sr.init {mmol/L} = 0.00011296707102434;
+      Ca_ss_sr.diff = -bss_sr*((Idiff+Idiff_ss)-(2*INaCa_ss_sr*AF/(2*Vss_sr)+Irel*Vjsr/Vss_sr));
+   }
+   subsystem Cl {
+      provides diffvar Cl_i {mmol/L};
+      provides diffvar Cl_ss {mmol/L};
+      Idiff_Cl {mmol/L/ms} = (Cl_ss-Cl_i)/tau_diff;
+      Cl_i.init {mmol/L} = 20.6683603724432;
+      Cl_i.diff = -(IClb*AF/(-1*Vmyo)-(CT_Na_Cl+CT_K_Cl+Idiff_Cl*Vss_sr/Vmyo));
+      Cl_ss.init {mmol/L} = 20.6683605553303;
+      Cl_ss.diff = -(Ito2*AF/(-1*Vss_sr)+Idiff_Cl);
+   }
+   subsystem Na {
+      provides diffvar Na_i {mmol/L};
+      provides diffvar Na_ss_sr {mmol/L};
+      Idiff_Na {mmol/L/ms} = (Na_ss_sr-Na_i)/tau_diff;
+      Na_i.init {mmol/L} = 8.01031392415197;
+      Na_i.diff = -((3*INaCa+3*INaK+INa+INaL+INab)*AF/Vmyo-(CT_Na_Cl+Idiff_Na*Vss_sr/Vmyo));
+      Na_ss_sr.init {mmol/L} = 8.01033434859049;
+      Na_ss_sr.diff = -(3*INaCa_ss_sr*AF/Vss_sr+Idiff_Na);
+   }
+   
+   subsystem membrane {
+      provides @interp(-100,100,1e-2) Vm {mV} = V;
+      provides @interp(-100,100,1e-2) VEK = Vm-EK;
+      provides i_Stim {uA/uF};
+      caiont {uA/uF} = ((ICaL+ICab+IpCa)-2*(INaCa+INaCa_ss_sr));
+      clont {uA/uF} = (IClb+Ito2);
+      naiont {uA/uF} = (INa+3*(INaCa+INaCa_ss_sr)+3*INaK+INaL+INab);
+      i_Stim = 0;
+      kiont {uA/uF} = (IKr+IKs+IK1+IKp+-2*INaK+Ito1+i_Stim);
+
+      provides V_init = -87;
+      provides Iion = naiont+kiont+caiont+clont;
+   }
+   
+   subsystem K {
+      provides diffvar K_i {mmol/L};
+      K_i.init {mmol/L} = 144.907134343314;
+      K_i.diff = -(((IKs+IKr+IK1+Ito1+IKp+i_Stim)-2*INaK)*AF/Vmyo-CT_K_Cl);
+   }
+}
