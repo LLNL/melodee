@@ -285,6 +285,7 @@ def generateCardioid(model, targetName, arch="cpu",interp=True):
 #include "Reaction.hh"
 #include "Interpolation.hh"
 #include "object.h"
+#include "reactionFactory.hh"
 #include <vector>
 #include <sstream>
 ''', template)
@@ -294,33 +295,29 @@ def generateCardioid(model, targetName, arch="cpu",interp=True):
 #include <nvrtc.h>
 #include <cuda.h>
 ''', template)
-    elif arch=="cpu":
-        pass
+    elif arch=="cpu" or arch=="vec":
+        out(r'''
+#include <simdops/simdops.hpp>
+''', template)
     else:
         assert(False)
+    out(r'''
 
-    if arch=="nvidia":
-        #FIXME
-        out(r'''
-namespace scanReaction
-{
-    Reaction* scan%(target)s(OBJECT* obj, const int numPoints, const double __dt);
-}
-''')
-    out(r'''    
+REACTION_FACTORY(%(target)s)(OBJECT* obj, const double dt, const int numPoints, const ThreadTeam& group);    
+
 namespace %(target)s
 {
 
 ''', template)
     if arch=="nvidia":
         pass
-    elif arch=="cpu":
+    elif arch=="cpu" or arch=="vec":
         out.inc()
         out(r'struct State')
         out("{")
         out.inc()
         for var in order(diffvars):
-            out("double %s;", var)
+            out("double %s[SIMDOPS_FLOAT64V_WIDTH];", var)
         out.dec()
         out("};")
         out.dec()
@@ -376,7 +373,7 @@ namespace %(target)s
       CUfunction _kernel;
       int blockSize_;
 ''', template)
-    elif arch=="cpu":
+    elif arch=="cpu" or arch=="vec":
         out(r'''
     public:
       void calc(double dt,
@@ -395,7 +392,8 @@ namespace %(target)s
         #FIXME
         out('friend Reaction* scanReaction::scan%(target)s(OBJECT* obj, const int numPoints, const double __dt);')
     out.dec(2)
-    out('''      
+    out('''
+      FRIEND_FACTORY(%(target)s)(OBJECT* obj, const double dt, const int numPoints, const ThreadTeam& group);
    };
 }
 
@@ -435,19 +433,8 @@ static inline string TO_STRING(const TTT x)
    ss << x;
    return ss.str();
 }
-   
-''',template)
-    if arch=="nvidia":
-        #FIXME
-        out(r'''
-namespace scanReaction
-{
 
-        Reaction* scan%(target)s(OBJECT* obj, const int numPoints, const double _dt)''',template)
-    else:
-        out('#include "reactionFactory.hh"')
-        out("REACTION_FACTORY(%(target)s)(OBJECT* obj, const int numPoints, const double _dt, const ThreadTeam& group)",template)
-    out(r'''
+   REACTION_FACTORY(%(target)s)(OBJECT* obj, const double _dt, const int numPoints, const ThreadTeam&)
    {
       %(target)s::ThisReaction* reaction = new %(target)s::ThisReaction(numPoints, _dt);
 
@@ -555,7 +542,7 @@ namespace scanReaction
         out.inc(2)
         out("reaction->constructKernel();")
         out.dec(2)
-    elif arch=="cpu":
+    elif arch=="cpu" or arch=="vec":
         pass
     else:
         assert(False)
@@ -563,11 +550,6 @@ namespace scanReaction
       return reaction;
    }
 #undef setDefault
-    ''',template)
-    if arch=="nvidia":
-        #FIXME
-        out("}")
-    out(r'''
 
 namespace %(target)s 
 {
@@ -621,6 +603,9 @@ if (actualTolerance > relError  && getRank(0) == 0)
     out.dec()
     out('''
 }''',template)
+
+
+    
     if arch=="nvidia":
         out(r'''
 void generateInterpString(stringstream& ss, const Interpolation& interp, const char* interpVar)
@@ -870,12 +855,28 @@ ThisReaction::~ThisReaction() {
 }
 
 ''',template)
-    elif arch=="cpu":
+    elif arch=="cpu" or arch=="vec":
         out('''
+
+#define width SIMDOPS_FLOAT64V_WIDTH
+#define real simdops::float64v
+#define load simdops::load
+
+/*
+#else
+#define width 1
+#define real double
+#define load(x) (*(x))
+#define store(x,y) ((*(x)) = y)
+#define extract(x,y) (x)
+#define insert(x,k,y) (y)
+#endif
+*/
+
 ThisReaction::ThisReaction(const int numPoints, const double __dt)
 : nCells_(numPoints)
 {
-   state_.resize(nCells_);
+   state_.resize((nCells_+width-1)/width);
    __cachedDt = __dt;
 }
 
@@ -885,26 +886,29 @@ void ThisReaction::calc(double _dt, const VectorDouble32& __Vm,
    //define the constants''', template)
         out.inc()
 
-        iprinter = InterpolatePrintCPUVisitor(out, model.ssa, params, interps)
+        iprinter = InterpolatePrintCPUVisitor(out, model.ssa, params, interps, decltype="double")
         model.printTarget(good,computeAllDepend&constants,iprinter)
 
         good |= constants
-    
+
         out.dec()
         out('''
-   for (unsigned __ii=0; __ii<nCells_; ++__ii)
+   for (unsigned __jj=0; __jj<(nCells_+width-1)/width; __jj++)
    {
+      const int __ii = __jj*width;
       //set Vm
-      const double V = __Vm[__ii];
-      const double iStim = __iStim[__ii];
+      const real V = load(&__Vm[__ii]);
+      const real iStim = load(&__iStim[__ii]);
 
       //set all state variables''', template)
         out.inc(2)
+        
         for var in order(diffvars):
-            out('const double %s=state_[__ii].%s;',var,var)
+            out('real %s=load(state_[__jj].%s);',var,var)
         good |= diffvars
         good.add(V)
-
+        
+        iprinter = InterpolatePrintCPUVisitor(out, model.ssa, good, interps, decltype="real")
         out("//get the gate updates (diagonalized exponential integrator)")
         gateGoals = set()
         for RLA,RLB in gateTargets.values():
@@ -927,50 +931,53 @@ void ThisReaction::calc(double _dt, const VectorDouble32& __Vm,
         good |= IionSet
         
         out("//Do the markov update (1 step rosenbrock with gauss siedel)")
-        for var in order(markovs):
-            out("double %s = %s;",markovTargets[var],diffvarUpdate[var])
-        out("int _count=0;")
-        out("double _error;")
-        out("do")
-        out("{")
-        out.inc()
-        iprinter.pushStack()
+        if markovs:
+            for var in order(markovs):
+                out("real %s = %s;",markovTargets[var],diffvarUpdate[var])
+            out("int _count=0;")
+            out("real _error;")
+            out("do")
+            out("{")
+            out.inc()
+            iprinter.pushStack()
 
-        for var in order(markovs):
-            out("double %s = %s;",markovOld[var], markovTargets[var])
-        markovGoals = set(markovOld.values())
-        good |= markovGoals
-        iprinter.declaredStack[-1] |= set(["%s" % var for var in markovTargets.values()])
-        markovSet = model.allDependencies(good|allfits,set(markovTargets.values()))
-        model.printSet(markovSet,iprinter)
+            for var in order(markovs):
+                out("real %s = %s;",markovOld[var], markovTargets[var])
+            markovGoals = set(markovOld.values())
+            good |= markovGoals
+            iprinter.declaredStack[-1] |= set(["%s" % var for var in markovTargets.values()])
+            markovSet = model.allDependencies(good|allfits,set(markovTargets.values()))
+            model.printSet(markovSet,iprinter)
 
-        out("_error = 0;")
-        for var in order(markovs):
-            old = markovOld[var]
-            new = markovTargets[var]
-            out("_error += (%s-%s)*(%s-%s);",old,new,old,new)
-        out("_count++;")
+            out("_error = 0;")
+            for var in order(markovs):
+                old = markovOld[var]
+                new = markovTargets[var]
+                out("_error += (%s-%s)*(%s-%s);",old,new,old,new)
+            out("_count++;")
 
-        iprinter.popStack()
-        out.dec()
-        out("} while (_error > 1e-100 && _count<50);")
+            iprinter.popStack()
+            out.dec()
+            out("} while (any(_error > 1e-100) && _count<50);")
 
         out("//EDIT_STATE")
         for var in order(diffvars-gates-markovs):
-            out('state_[__ii].%s += _dt*%s;',var,diffvarUpdate[var])
+            out('%s += _dt*%s;',var,diffvarUpdate[var])
         for var in order(gates):
             (RLA,RLB) = gateTargets[var]
-            out('state_[__ii].%(v)s += %(a)s*(%(v)s+%(b)s);',
+            out('%(v)s += %(a)s*(%(v)s+%(b)s);',
                 v=var,
                 a=RLA,
                 b=RLB,
             )
         for var in order(markovs):
-            out("state_[__jj].%s += _dt*%s;",var,markovTargets[var])
-                     
-        out("__dVm[__ii] = -%s;", Iion)
-        out.dec(2)
+            out("%s += _dt*%s;",var,markovTargets[var])
 
+        for var in order(diffvars):
+            out("store(state_[__jj].%s, %s);", var,var)
+
+        out("store(&__dVm[__ii],-%s);", Iion)
+        out.dec(2)
         out('''
    }
 }''',template)
@@ -1002,25 +1009,29 @@ void ThisReaction::initializeMembraneVoltage(VectorDouble32& __Vm)
     model.printTarget(good,diffvars,cprinter)
 
     if arch=="nvidia":
-        def stateName(var,index):
+        def readState(var,index):
             return "stateData[_%s_off*nCells_+%s]" % (var,index)
-    elif arch=="cpu":
-        def stateName(var,index):
-            return "state_[%s].%s" % (index,var)
+        def writeState(statevar,value,index):
+            return "%s = %s;" % (readState(statevar,index),value)
+    elif arch=="cpu" or arch=="vec":
+        def readState(var,index):
+            return "state_[%s/width].%s[%s %% width]" % (index,var,index)
+        def writeState(statevar,value,index):
+            return "%s = %s;" % (readState(statevar,index),value)
     else:
         assert(False)
         
     if arch=="nvidia":
         out("ArrayView<double> stateData = stateTransport_;")
-    elif arch=="cpu":
-        out("state_.resize(nCells_);")
+    elif arch=="cpu" or arch=="vec":
+        out("state_.resize((nCells_+width-1)/width);")
     else:
         assert(False)
     out(r'for (int iCell=0; iCell<nCells_; iCell++)')
     out('{')
     out.inc()
     for var in order(diffvars):
-        out("%s = %s;",stateName(var,"iCell"),var)
+        out(writeState(var,var,"iCell"))
     out.dec(2)
     out('''
    }
@@ -1071,13 +1082,13 @@ void ThisReaction::setValue(int iCell, int varHandle, double value)
     out.inc()
     if arch=="nvidia":
         out("ArrayView<double> stateData = stateTransport_;")
-    elif arch=="cpu":
+    elif arch=="cpu" or arch=="vec":
         pass
     else:
         assert(False)
     out("if (0) {}")
     for var in order(diffvars):
-        out('else if (varHandle == %s_handle) { %s = value; }', var, stateName(var,"iCell"))
+        out('else if (varHandle == %s_handle) { %s }', var, writeState(var,"value","iCell"))
     out.dec()
     out('''
 }
@@ -1088,13 +1099,13 @@ double ThisReaction::getValue(int iCell, int varHandle) const
     out.inc()
     if arch=="nvidia":
         out("ConstArrayView<double> stateData = stateTransport_;")
-    elif arch=="cpu":
+    elif arch=="cpu" or arch=="vec":
         pass
     else:
         assert(False)
     out("if (0) {}")
     for var in order(diffvars):
-        out('else if (varHandle == %s_handle) { return %s; }', var, stateName(var,"iCell"))
+        out('else if (varHandle == %s_handle) { return %s; }', var, readState(var,"iCell"))
     out.dec()
     out('''
 
@@ -1107,12 +1118,12 @@ double ThisReaction::getValue(int iCell, int varHandle, double V) const
     out.inc()
     if arch=="nvidia":
         out("ConstArrayView<double> stateData = stateTransport_;")
-    elif arch=="cpu":
+    elif arch=="cpu" or arch=="vec":
         pass
     else:
         assert(False)
     for var in order(diffvars):
-        out('const double %s=%s;',var,stateName(var,"iCell"))
+        out('const double %s=%s;',var,readState(var,"iCell"))
     out('if (0) {}')
     for var in order(diffvars|tracevars):
         out('else if (varHandle == %s_handle)', var)
@@ -1149,6 +1160,7 @@ void ThisReaction::getCheckpointInfo(vector<string>& fieldNames,
 generators = {
     frozenset(["cardioid"]) : lambda model, targetName : generateCardioid(model,targetName,"cpu"),
     frozenset(["cardioid", "cpu"]) : lambda model, targetName : generateCardioid(model,targetName,"cpu"),
-    frozenset(["cardioid","nvidia"]) : lambda model, targetName : generateCardioid(model,targetName,"nvidia"),
+    frozenset(["cardioid", "nvidia"]) : lambda model, targetName : generateCardioid(model,targetName,"nvidia"), 
+    frozenset(["cardioid", "vec"]) : lambda model, targetName : generateCardioid(model,targetName,"vec"),
     frozenset(["cardioid", "nointerp"]) : lambda model, targetName : generateCardioid(model,targetName,"cpu",interp=False)
 }
