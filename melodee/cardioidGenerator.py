@@ -388,9 +388,6 @@ namespace %(target)s
         assert(False)
     out.inc(2)
     out("Interpolation _interpolant[%d];" % fitCount)
-    if arch=="nvidia":
-        #FIXME
-        out('friend Reaction* scanReaction::scan%(target)s(OBJECT* obj, const int numPoints, const double __dt);')
     out.dec(2)
     out('''
       FRIEND_FACTORY(%(target)s)(OBJECT* obj, const double dt, const int numPoints, const ThreadTeam& group);
@@ -989,13 +986,22 @@ void ThisReaction::calc(double _dt, const VectorDouble32& __Vm,
 string ThisReaction::methodName() const
 {
    return "%(target)s";
-}
-   
+}'''%template)
+    if arch=="cpu" or arch=="vec":
+        out('''
 void ThisReaction::initializeMembraneVoltage(VectorDouble32& __Vm)
 {
    assert(__Vm.size() >= nCells_);
 
 ''', template)
+    elif arch=="nvidia":
+        out('''
+void ThisReaction::initializeMembraneVoltage(ArrayView<double> __Vm)
+{
+   assert(__Vm.size() >= nCells_);
+
+''', template)
+    
     out.inc()
     
     cprinter = CPrintVisitor(out, model.ssa, params)
