@@ -33,7 +33,7 @@ shared V_init {mV};
 subsystem TT06 {
 
    @interp(-100,100,1e-2) V;
-   provides V_init = -86.709;
+   provides V_init = -83;
 
    provides @flag celltype {enum(ENDO,MID,EPI)} = ENDO;
 
@@ -43,24 +43,27 @@ subsystem TT06 {
    provides T {K} = 310;
    provides V_c {um^3} = 0.016404;
 
-   shared Na_i {mmol/L};
-   shared Na_o {mmol/L};
+   provides factor_fix {nA/A} = 1{uA/pA}/1{L/um^3};
+   shared Na_o {mM};
+   shared Na_i {mM};
    shared i_Naitot {uA/uF};
    subsystem sodium_dynamics {
       provides diffvar Na_i;
       Na_i.init = 10.355;
-      Na_i.diff = -1*i_Naitot/(1*V_c*F)*Cm;
-      provides Na_o {mmol/L} = 140;
+      /* Na_i.diff = -1*(i_Na+i_b_Na+3*i_NaK+3*i_NaCa)/1*V_c*F*Cm; */
+      Na_i.diff = -i_Naitot*Cm/V_c/F*factor_fix;
+      provides Na_o = 140;
    }
 
-   shared K_i {mmol/L};
-   shared K_o {mmol/L};
+   shared K_o {mM};
+   shared K_i {mM};
    shared i_Kitot {uA/uF};
    subsystem potassium_dynamics {
       provides diffvar K_i;
       K_i.init = 138.4;
-      K_i.diff = -1*i_Kitot/(1*V_c*F)*Cm;
-      provides K_o {mmol/L} = 5.4;
+      //K_i.diff = -1*((i_K1+i_to+i_Kr+i_Ks+i_p_K+i_Stim)-2*i_NaK)/1*V_c*F*Cm;
+      K_i.diff = -i_Kitot*Cm/V_c/F*factor_fix;
+      provides K_o = 5.4;
    }
 
    shared E_K {mV};
@@ -72,20 +75,22 @@ subsystem TT06 {
    provides @interp(-100,100,1e-2) VEK {mV} = V - E_K;
 
    subsystem sodium_potassium_pump_current {
-      K_mNa {mmol/L} = 40;
-      K_mk {mmol/L} = 1;
-      P_NaK {pA/pF} = 2.724;
+      K_mNa = 40;
+      K_mk = 1;
+      P_NaK = 2.724;
       i_NaK_term = P_NaK*K_o/(K_o+K_mk)/(1+0.1245*exp(-0.1*V*F/(R*T))+0.0353*exp(-V*F/(R*T)));
-      @trace i_NaK {pA/pF} = i_NaK_term*Na_i/(Na_i+K_mNa);
+      @trace i_NaK = i_NaK_term*Na_i/(Na_i+K_mNa);
       provides accum i_Naitot += 3*i_NaK;
-      provides accum i_Kitot -= 2*i_NaK;
+      provides accum i_Kitot  -= 2*i_NaK;
    }
+
    subsystem fast_sodium_current {
       shared h {1};
       shared j {1};
       shared m {1};
       subsystem fast_sodium_current_h_gate {
-         provides diffvar @gate h {1};
+         provides diffvar @gate h;
+         //@nointerp alpha_h,beta_h;
          if (V < -40) {
             alpha_h = 0.057*exp(-(V+80)/6.8);
             beta_h = (2.7*exp(0.079*V)+310000*exp(0.3485*V));
@@ -93,13 +98,14 @@ subsystem TT06 {
             alpha_h = 0;
             beta_h = 0.77/(0.13*(1+exp((V+10.66)/-11.1)));
          }
-         h_inf {1} = 1/(pow((1+exp((V+71.55)/7.43)),2));
-         tau_h {ms} = 1/(alpha_h+beta_h);
-         h.init = 0.7573;
+         h_inf = 1/(pow((1+exp((V+71.55)/7.43)),2));
+         tau_h = 1/(alpha_h+beta_h);
+         h.init = 0.55;
          h.diff = (h_inf-h)/tau_h;
       }
       subsystem fast_sodium_current_j_gate {
-         provides diffvar @gate j {1};
+         provides diffvar @gate j;
+         //@nointerp alpha_j,beta_j;
          if (V < -40) {
             alpha_j = (-25428*exp(0.2444*V)-6.948e-6*exp(-0.04391*V))*(V+37.78)/1/(1+exp(0.311*(V+79.23)));
             beta_j = 0.02424*exp(-0.01052*V)/(1+exp(-0.1378*(V+40.14)));
@@ -107,103 +113,109 @@ subsystem TT06 {
             alpha_j = 0;
             beta_j = 0.6*exp(0.057*V)/(1+exp(-0.1*(V+32)));
          }
-         j_inf {1} = 1/(pow((1+exp((V+71.55)/7.43)),2));
-         tau_j {ms} = 1/(alpha_j+beta_j);
-         j.init = 0.7225;
+         j_inf = 1/(pow((1+exp((V+71.55)/7.43)),2));
+         tau_j = 1/(alpha_j+beta_j);
+         j.init = 0.66;
          j.diff = (j_inf-j)/tau_j;
       }
       subsystem fast_sodium_current_m_gate {
-         provides diffvar @gate m {1};
-         alpha_m {1} = 1/(1+exp((-60-V)/5));
-         beta_m {1} = (0.1/(1+exp((V+35)/5))+0.1/(1+exp((V-50)/200)));
-         m_inf {1} = 1/(pow((1+exp((-56.86-V)/9.03)),2));
-         tau_m {ms} = 1*alpha_m*beta_m;
+         provides diffvar @gate m;
+         alpha_m = 1/(1+exp((-60-V)/5));
+         beta_m = (0.1/(1+exp((V+35)/5))+0.1/(1+exp((V-50)/200)));
+         m_inf = 1/pow((1+exp((-56.86-V)/9.03)),2);
+         provides tau_m {ms} = 1*alpha_m*beta_m;
          m.init = 0.00155;
          m.diff = (m_inf-m)/tau_m;
       }
-      @param g_Na {nS/pF} = 14.838;
-      @trace i_Na {pA/pF} = g_Na*pow(m,3)*h*j*(V-E_Na);
+      @param g_Na = 14.838;
+      @trace i_Na = g_Na*pow(m,3)*h*j*(V-E_Na);
       provides accum i_Naitot += i_Na;
    }
+
    subsystem inward_rectifier_potassium_current {
-      alpha_K1 {1} = 0.1/(1+exp(0.06*((VEK)-200)));
-      beta_K1 {1} = (3*exp(0.0002*((VEK)+100))+exp(0.1*((VEK)-10)))/(1+exp(-0.5*(VEK)));
-      @param g_K1 {nS/pF} = 5.405;
-      xK1_inf {1} = alpha_K1/(alpha_K1+beta_K1);
-      @trace i_K1 {pA/pF} = g_K1*xK1_inf*sqrt(K_o/5.4)*(VEK);
-      provides accum i_Kitot += i_K1;
+      alpha_K1 = 0.1/(1+exp(0.06*(VEK-200)));
+      beta_K1 = (3*exp(0.0002*(VEK+100))+exp(0.1*(VEK-10)))/(1+exp(-0.5*VEK));
+      @param g_K1 = 5.405;
+      xK1_inf = alpha_K1/(alpha_K1+beta_K1);
+      @trace i_K1 = g_K1*xK1_inf*sqrt(K_o/5.4)*VEK;
+      provides accum i_Kitot += i_K1;   
    }
+   
    subsystem potassium_pump_current {
-      @param g_pK {nS/pF} = 0.0146;
+      @param g_pK = 0.0146;
+      //@nointerp
       i_p_K_term = 1/(1+exp((25-V)/5.98));
-      @trace i_p_K {pA/pF} = g_pK*(VEK)*i_p_K_term;
+      @trace i_p_K = g_pK*VEK*i_p_K_term;
       provides accum i_Kitot += i_p_K;
    }
+
    subsystem rapid_time_dependent_potassium_current {
       shared Xr1 {1};
       shared Xr2 {1};
       subsystem rapid_time_dependent_potassium_current_Xr1_gate {
-         provides diffvar @gate Xr1 {1};
-         alpha_xr1 {1} = 450/(1+exp((-45-V)/10));
-         beta_xr1 {1} = 6/(1+exp((V+30)/11.5));
-         xr1_inf {1} = 1/(1+exp((-26-V)/7));
-         tau_xr1 {ms} = 1*alpha_xr1*beta_xr1;
+         provides diffvar @gate Xr1;
+         alpha_xr1 = 450/(1+exp((-45-V)/10));
+         beta_xr1 = 6/(1+exp((V+30)/11.5));
+         xr1_inf = 1/(1+exp((-26-V)/7));
+         tau_xr1 = 1*alpha_xr1*beta_xr1;
          Xr1.init = 0.00448;
          Xr1.diff = (xr1_inf-Xr1)/tau_xr1;
       }
       subsystem rapid_time_dependent_potassium_current_Xr2_gate {
-         provides diffvar @gate Xr2 {1};
-         alpha_xr2 {1} = 3/(1+exp((-60-V)/20));
-         beta_xr2 {1} = 1.12/(1+exp((V-60)/20));
-         xr2_inf {1} = 1/(1+exp((V+88)/24));
-         tau_xr2 {ms} = 1*alpha_xr2*beta_xr2;
+         provides diffvar @gate Xr2;
+         alpha_xr2 = 3/(1+exp((-60-V)/20));
+         beta_xr2 = 1.12/(1+exp((V-60)/20));
+         xr2_inf = 1/(1+exp((V+88)/24));
+         tau_xr2 = 1*alpha_xr2*beta_xr2;
          Xr2.init = 0.476;
          Xr2.diff = (xr2_inf-Xr2)/tau_xr2;
       }
-      @param g_Kr {nS/pF} = 0.153;
-      @trace i_Kr {pA/pF} = g_Kr*sqrt(K_o/5.4)*Xr1*Xr2*(VEK);
+      @param g_Kr = 0.153;
+      @trace i_Kr = g_Kr*sqrt(K_o/5.4)*Xr1*Xr2*VEK;
       provides accum i_Kitot += i_Kr;
    }
+
    subsystem slow_time_dependent_potassium_current {
       shared Xs {1};
       subsystem slow_time_dependent_potassium_current_Xs_gate {
-         provides diffvar @gate Xs {1};
-         alpha_xs {1} = 1400/(sqrt((1+exp((5-V)/6))));
-         beta_xs {1} = 1/(1+exp((V-35)/15));
-         xs_inf {1} = 1/(1+exp((-5-V)/14));
-         tau_xs {ms} = (1*alpha_xs*beta_xs+80);
+         provides diffvar @gate Xs;
+         alpha_xs = 1400/sqrt((1+exp((5-V)/6)));
+         beta_xs = 1/(1+exp((V-35)/15));
+         xs_inf = 1/(1+exp((-5-V)/14));
+         tau_xs = (1*alpha_xs*beta_xs+80);
          Xs.init = 0.0087;
          Xs.diff = (xs_inf-Xs)/tau_xs;
       }
-      P_kna {1} = 0.03;
-      E_Ks {mV} = R*T/F*log((K_o+P_kna*Na_o)/(K_i+P_kna*Na_i));
+      P_kna = 0.03;
+      E_Ks = R*T/F*log((K_o+P_kna*Na_o)/(K_i+P_kna*Na_i));
       @param g_Ks;
       if (celltype == MID) {
         g_Ks = 0.098;
       } else {
         g_Ks = 0.392;
       }
-      @trace i_Ks {pA/pF} = g_Ks*pow(Xs,2)*(V-E_Ks);
+      @trace i_Ks = g_Ks*pow(Xs,2)*(V-E_Ks);
       provides accum i_Kitot += i_Ks;
-
    }
+
    subsystem sodium_background_current {
-      @param g_bna {nS/pF} = 0.00029;
-      @trace i_b_Na {pA/pF} = g_bna*(V-E_Na);
+      @param g_bna = 0.00029;
+      @trace i_b_Na = g_bna*(V-E_Na);
       provides accum i_Naitot += i_b_Na;
    }
+
    subsystem transient_outward_current {
       shared r {1};
       shared s {1};
       subsystem transient_outward_current_r_gate {
-         provides diffvar @gate r {1};
-         r_inf {1} = 1/(1+exp((20-V)/6));
-         tau_r {ms} = (9.5*exp(-pow((V+40),2)/1800)+0.8);
+         provides diffvar @gate r;
+         r_inf = 1/(1+exp((20-V)/6));
+         tau_r = (9.5*exp(-pow((V+40),2)/1800)+0.8);
          r.init = 2.235e-8;
          r.diff = (r_inf-r)/tau_r;
       }
       subsystem transient_outward_current_s_gate {
-         provides diffvar @gate s {1};
+         provides diffvar @gate s;
          if (celltype == ENDO) {
            s_inf = 1/(1+exp((V+28)/5));
            tau_s = 1000*exp(-pow(V+67,2)/1000)+8;
@@ -211,26 +223,27 @@ subsystem TT06 {
            s_inf = 1/(1+exp((V+20)/5));
            tau_s = 85*exp(-pow(V+45,2)/320)+5/(1+exp((V-20)/5))+3;
          }
-         s.init = 0.3212;
+         s.init = 0.6012;
          s.diff = (s_inf-s)/tau_s;
       }
-      @param g_to {nS/pF};
+      @param g_to;
       if (celltype == ENDO) {
         g_to = 0.073;
       } else {
         g_to = 0.294;
       }
-      @trace i_to {pA/pF} = g_to*r*s*(VEK);
+      @trace i_to = g_to*r*s*VEK;
       provides accum i_Kitot += i_to;
    }
 
    shared i_Caitot {uA/uF};
    subsystem calcium_dynamics {
-      provides Ca_o {mmol/L} = 2;
-      provides diffvar Ca_i {mmol/L};
-      provides diffvar @interp(1e-7,1e-1,1e-6) Ca_ss {mmol/L};
-      diffvar Ca_SR {mmol/L};
-      diffvar @gate R_prime {1};
+      provides Ca_o {uM} = 2;
+      provides diffvar Ca_i {uM};
+      provides diffvar @interp(1e-7,1e-1,1e-6) Ca_ss {uM};
+      //provides diffvar Ca_ss {uM};
+      diffvar Ca_SR {uM};
+      diffvar R_prime {1};
       shared i_b_Ca {uA/uF};
       shared i_p_Ca {uA/uF};
       shared i_CaL {uA/uF};
@@ -241,110 +254,114 @@ subsystem TT06 {
          shared f2 {1};
          shared fCass {1};
          subsystem L_type_Ca_current_d_gate {
-            provides diffvar @gate d {1};
-            alpha_d {1} = (1.4/(1+exp((-35-V)/13))+0.25);
-            beta_d {1} = 1.4/(1+exp((V+5)/5));
-            d_inf {1} = 1/(1+exp((-8-V)/7.5));
-            gamma_d {ms} = 1/(1+exp((50-V)/20));
-            tau_d {ms} = (1*alpha_d*beta_d+gamma_d);
+            provides diffvar @gate d;
+            alpha_d = (1.4/(1+exp((-35-V)/13))+0.25);
+            beta_d = 1.4/(1+exp((V+5)/5));
+            d_inf = 1/(1+exp((-8-V)/7.5));
+            gamma_d = 1/(1+exp((50-V)/20));
+            tau_d = (1*alpha_d*beta_d+gamma_d);
             d.init = 3.164e-5;
             d.diff = (d_inf-d)/tau_d;
          }
          subsystem L_type_Ca_current_f2_gate {
-            provides diffvar @gate f2 {1};
-            f2_inf {1} = (0.67/(1+exp((V+35)/7))+0.33);
-            tau_f2 {ms} = (562*exp(-pow((V+27),2)/240)+31/(1+exp((25-V)/10))+80/(1+exp((V+30)/10)));
+            provides diffvar @gate f2;
+            f2_inf = (0.67/(1+exp((V+35)/7))+0.33);
+            tau_f2 = (562*exp(-pow((V+27),2)/240)+31/(1+exp((25-V)/10))+80/(1+exp((V+30)/10)));
             f2.init = 0.9778;
             f2.diff = (f2_inf-f2)/tau_f2;
          }
          subsystem L_type_Ca_current_fCass_gate {
-            provides diffvar @gate fCass {1};
-            fCass_inf {1} = (0.6/(1+pow(Ca_ss/0.05,2))+0.4);
-            tau_fCass {ms} = (80/(1+pow(Ca_ss/0.05,2))+2);
+            provides diffvar @gate fCass;
+            fCass_inf = (0.6/(1+pow(Ca_ss/0.05,2))+0.4);
+            tau_fCass = (80/(1+pow(Ca_ss/0.05,2))+2);
             fCass.init = 0.9953;
             fCass.diff = (fCass_inf-fCass)/tau_fCass;
          }
          subsystem L_type_Ca_current_f_gate {
-            provides diffvar @gate f {1};
-            f_inf {1} = 1/(1+exp((V+20)/7));
-            tau_f {ms} = (1102.5*exp(-pow((V+27),2)/225)+200/(1+exp((13-V)/10))+180/(1+exp((V+30)/10))+20);
-            f.init = 0.8009;
+            provides diffvar @gate f;
+            f_inf = 1/(1+exp((V+20)/7));
+            tau_f = (1102.5*exp(-pow((V+27),2)/225)+200/(1+exp((13-V)/10))+180/(1+exp((V+30)/10))+20);
+            f.init = 0.9609;
             f.diff = (f_inf-f)/tau_f;
          }
-         @param g_CaL {L/s/F} = 0.0000398;
+         @param g_CaL = 0.0000398;
          i_CalTerm1 = 4*(V-15)*pow(F,2)/(R*T);
          i_CalTerm2 = exp(2*(V-15)*F/(R*T));
-         if (V==15) {
-            i_CalTerm3 = 2*F;
+         if( V==15 ) {
+           i_CalTerm3 = 2*F;
          } else {
-            i_CalTerm3 = i_CalTerm1/(i_CalTerm2-1);
+           i_CalTerm3 = i_CalTerm1/(i_CalTerm2-1);
          }
          i_CalTerm4 = i_CalTerm3*i_CalTerm2;
          provides @trace i_CaL = g_CaL*d*f*f2*fCass*(0.25*Ca_ss*i_CalTerm4-Ca_o*i_CalTerm3);
          provides accum i_Caitot += i_CaL;
       }
       subsystem calcium_pump_current {
-         K_pCa {mmol/L} = 0.0005;
-         @param g_pCa {pA/pF} = 0.1238;
-         provides @trace i_p_Ca {pA/pF} = g_pCa*Ca_i/(Ca_i+K_pCa);
+         K_pCa = 0.0005;
+         @param g_pCa = 0.1238;
+         provides @trace i_p_Ca = g_pCa*Ca_i/(Ca_i+K_pCa);
          provides accum i_Caitot += i_p_Ca;
       }
       subsystem sodium_calcium_exchanger_current {
-         K_NaCa {pA/pF} = 1000;
-         K_sat {1} = 0.1;
-         Km_Ca {mmol/L} = 1.38;
-         Km_Nai {mmol/L} = 87.5;
-         alpha {1} = 2.5;
-         gamma {1} = 0.35;
-         provides @trace i_NaCa {pA/pF} = K_NaCa*(exp(gamma*V*F/(R*T))*pow(Na_i,3)*Ca_o-exp((gamma-1)*V*F/(R*T))*pow(Na_o,3)*Ca_i*alpha)/((pow(Km_Nai,3)+pow(Na_o,3))*(Km_Ca+Ca_o)*(1+K_sat*exp((gamma-1)*V*F/(R*T))));
+         K_NaCa = 1000;
+         K_sat = 0.1;
+         Km_Ca = 1.38;
+         Km_Nai = 87.5;
+         alpha = 2.5;
+         gamma = 0.35;
+         exp_gamma_VFRT = exp(gamma*V*F/(R*T));
+         exp_gamma_m1_VFRT = exp((gamma-1)*V*F/(R*T));
+         provides @trace i_NaCa = K_NaCa*(exp_gamma_VFRT*pow(Na_i,3)*Ca_o-exp_gamma_m1_VFRT*pow(Na_o,3)*Ca_i*alpha)/((pow(Km_Nai,3)+pow(Na_o,3))*(Km_Ca+Ca_o)*(1+K_sat*exp_gamma_m1_VFRT));
          provides accum i_Naitot += 3*i_NaCa;
          provides accum i_Caitot -= 2*i_NaCa;
       }
       subsystem calcium_background_current {
-         E_Ca {mV} = 0.5*R*T/F*log(Ca_o/Ca_i);
-         @param g_bca {nS/pF} = 0.000592;
-         provides @trace i_b_Ca {pA/pF} = g_bca*(V-E_Ca);
+         @param g_bca = 0.000592;
+         E_Ca = 0.5*R*T/F*log(Ca_o/Ca_i);
+         provides @trace i_b_Ca = g_bca*(V-E_Ca);
          provides accum i_Caitot += i_b_Ca;
       }
-      Buf_c {mmol/L} = 0.2;
-      Buf_sr {mmol/L} = 10;
-      Buf_ss {mmol/L} = 0.4;
-      EC {mmol/L} = 1.5;
-      K_buf_c {mmol/L} = 0.001;
-      K_buf_sr {mmol/L} = 0.3;
-      K_buf_ss {mmol/L} = 0.00025;
-      K_up {mmol/L} = 0.00025;
-      V_leak {1/ms} = 0.00036;
-      V_rel {1/ms} = 0.102;
-      V_sr {um^3} = 0.001094;
-      V_ss {um^3} = 0.00005468;
-      V_xfer {1/ms} = 0.0038;
-      Vmax_up {mmol/L/ms} = 0.006375;
-      k1_prime {L^2/mmol^2/ms} = 0.15;
-      k2_prime {L/mmol/ms} = 0.045;
-      k3 {1/ms} = 0.06;
-      k4 {1/ms} = 0.005;
-      max_sr {1} = 2.5;
-      min_sr {1} = 1;
-      Ca_i_bufc {1} = 1/(1+Buf_c*K_buf_c/pow((Ca_i+K_buf_c),2));
-      Ca_sr_bufsr {1} = 1/(1+Buf_sr*K_buf_sr/pow((Ca_SR+K_buf_sr),2));
-      Ca_ss_bufss {1} = 1/(1+Buf_ss*K_buf_ss/pow((Ca_ss+K_buf_ss),2));
-      @trace i_leak {mmol/L/ms} = V_leak*(Ca_SR-Ca_i);
-      @trace i_up {mmol/L/ms} = Vmax_up/(1+pow(K_up,2)/pow(Ca_i,2));
-      @trace i_xfer {mmol/L/ms} = V_xfer*(Ca_ss-Ca_i);
-      kcasr {1} = (max_sr-(max_sr-min_sr)/(1+pow(EC/Ca_SR,2)));
-      Ca_i.init = 0.00013;
+      Buf_c = 0.2;
+      Buf_sr = 10;
+      Buf_ss = 0.4;
+      EC = 1.5;
+      K_buf_c = 0.001;
+      K_buf_sr = 0.3;
+      K_buf_ss = 0.00025;
+      K_up = 0.00025;
+      V_leak = 0.00036;
+      V_rel = 0.102;
+      V_sr = 0.001094;
+      V_ss = 0.00005468;
+      V_xfer = 0.0038;
+      Vmax_up = 0.006375;
+      k1_prime = 0.15;
+      k2_prime = 0.045;
+      k3 = 0.06;
+      k4 = 0.005;
+      max_sr = 2.5;
+      min_sr = 1;
+      Ca_i_bufc = 1/(1+Buf_c*K_buf_c/pow((Ca_i+K_buf_c),2));
+      Ca_sr_bufsr = 1/(1+Buf_sr*K_buf_sr/pow((Ca_SR+K_buf_sr),2));
+      Ca_ss_bufss = 1/(1+Buf_ss*K_buf_ss/pow((Ca_ss+K_buf_ss),2));
+      @trace i_leak = V_leak*(Ca_SR-Ca_i);
+      @trace i_up = Vmax_up/(1+pow(K_up,2)/pow(Ca_i,2));
+      @trace i_xfer = V_xfer*(Ca_ss-Ca_i);
+      kcasr = (max_sr-(max_sr-min_sr)/(1+pow(EC/Ca_SR,2)));
+      Ca_i.init = 0.00002;
       Ca_i.diff = Ca_i_bufc*(((i_leak-i_up)*V_sr/V_c+i_xfer)-1*((i_b_Ca+i_p_Ca)-2*i_NaCa)*Cm/(2*1*V_c*F));
-      k1 {L^2/mmol^2/ms} = k1_prime/kcasr;
-      k2 {L/mmol/ms} = k2_prime*kcasr;
-      O {1} = k1*pow(Ca_ss,2)*R_prime/(k3+k1*pow(Ca_ss,2));
-      R_prime.init = 0.9068;
+      k1 = k1_prime/kcasr;
+      k2 = k2_prime*kcasr;
+      O = k1*pow(Ca_ss,2)*R_prime/(k3+k1*pow(Ca_ss,2));
+      R_prime.init = 0.9868;
       R_prime.diff = (-k2*Ca_ss*R_prime+k4*(1-R_prime));
-      @trace i_rel {mmol/L/ms} = V_rel*O*(Ca_SR-Ca_ss);
-      Ca_SR.init = 3.715;
+      @trace i_rel = V_rel*O*(Ca_SR-Ca_ss);
+      Ca_SR.init = 3.155;
       Ca_SR.diff = Ca_sr_bufsr*(i_up-(i_rel+i_leak));
-      Ca_ss.init = 0.00036;
+      Ca_ss.init = 0.00017;
       Ca_ss.diff = Ca_ss_bufss*((-1*i_CaL*Cm/(2*1*V_ss*F)+i_rel*V_sr/V_ss)-i_xfer*V_c/V_ss);
    }
+
    provides accum Iion += i_Naitot+i_Kitot+i_Caitot;
 }
+
