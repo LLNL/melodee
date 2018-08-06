@@ -440,6 +440,23 @@ static inline string TO_STRING(const TTT x)
    return ss.str();
 }
 
+const char* interpName[] = {''', template)
+    out.inc()
+    fitMap = []
+    for fit in range(0,len(interps)):
+        fitMap.append(0)
+    for target in order(interps.keys()):
+        fit,fitCount,lb,ub,inc = interps[target]
+        fitMap[fitCount] = (target,fit,lb,ub,inc)
+    for fitCount in range(0,len(fitMap)):
+        (target,fit,lb,ub,inc) = fitMap[fitCount]
+        out('"%s",',target)    
+    out.dec()
+    out(r'''
+    NULL
+};
+
+
    REACTION_FACTORY(%(target)s)(OBJECT* obj, const double _dt, const int numPoints, const ThreadTeam&)
    {
       %(target)s::ThisReaction* reaction = new %(target)s::ThisReaction(numPoints, _dt);
@@ -524,14 +541,14 @@ static inline string TO_STRING(const TTT x)
     out(r'''
          outfile << "   functions = ";
          for (int _ii=0; _ii<funcCount; _ii++) {
-            outfile << obj->name << "_interpFunc" << _ii << " ";
+            outfile << obj->name << "_interpFunc" << _ii << "_" << interpName[_ii] << " ";
          }
          outfile << ";\n";
          outfile << "}\n";
 
          for (int _ii=0; _ii<funcCount; _ii++)
          {
-            outfile << obj->name << "_interpFunc" << _ii << " FUNCTION { "
+            outfile << obj->name << "_interpFunc" << _ii << "_" << interpName[_ii] << " FUNCTION { "
                     << "numer=" << reaction->_interpolant[_ii].numNumer_ << "; "
                     << "denom=" << reaction->_interpolant[_ii].numDenom_ << "; "
                     << "coeff=";
@@ -564,11 +581,6 @@ void ThisReaction::createInterpolants(const double _dt) {
 ''', template)
 
     out.inc()
-    fitMap = []
-    for fit in range(0,len(interps)):
-        fitMap.append(0)
-    for target,(fit,fitCount,lb,ub,inc) in interps.items():
-        fitMap[fitCount] = (target,fit,lb,ub,inc)
     for fitCount in range(0,len(interps)):
         target,fit,lb,ub,inc = fitMap[fitCount]
         lookup = {
