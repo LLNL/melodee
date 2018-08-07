@@ -32,7 +32,7 @@ shared V_init {mV};
 
 subsystem TT06 {
 
-   @interp(-100,100,1e-2) V;
+   @interp(-100,100,1e-2,1e-3) V;
    provides V_init = -83;
 
    provides @flag celltype {enum(ENDO,MID,EPI)} = ENDO;
@@ -72,7 +72,7 @@ subsystem TT06 {
       provides E_K = R*T/F*log(K_o/K_i);
       provides E_Na = R*T/F*log(Na_o/Na_i);
    }
-   provides @interp(-100,100,1e-2) VEK {mV} = V - E_K;
+   provides @interp(-100,100,1e-2,1e-3) VEK {mV} = V - E_K;
 
    subsystem sodium_potassium_pump_current {
       K_mNa = 40;

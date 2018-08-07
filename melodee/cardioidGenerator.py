@@ -148,7 +148,7 @@ class InterpolatePrintCPUVisitor(CPrintVisitor):
         super(InterpolatePrintCPUVisitor, self).__init__(out,ssa,declared,decltype)
     def equationPrint(self,lhs,rhs):
         if lhs in self.interps:
-            (interpVar, count, dontcare, dontcare, dontcare) = self.interps[lhs]
+            (interpVar, count, dontcare, dontcare, dontcare, dontcare) = self.interps[lhs]
             rhsText = "_interpolant[%d].eval(%s)" % (count, interpVar)
             self.equationPrintWithRhs(lhs,rhsText)
         else:
@@ -163,7 +163,7 @@ class InterpolatePrintNvidiaVisitor(CPrintVisitor):
         super(InterpolatePrintNvidiaVisitor, self).__init__(out,ssa,declared,decltype)
     def equationPrint(self,lhs,rhs):
         if lhs in self.interps:
-            (interpVar, count, dontcare, dontcare, dontcare) = self.interps[lhs]
+            (interpVar, count, dontcare, dontcare, dontcare, dontcare) = self.interps[lhs]
             self.out('"; generateInterpString(ss,_interpolant[%d], "%s"); ss << "',count,interpVar)
             self.equationPrintWithRhs(lhs,"_ratPoly")
         else:
@@ -269,19 +269,25 @@ def generateCardioid(model, targetName, arch="cpu",interp=True):
         polyfitTargets[fit] = externallyUsedFits
         allfits |= externallyUsedFits
 
-    specialInterp = model.varsWithAttribute("changeInterpDefault")
-
     fitCount = 0
     interps = {}
+    def interpParams(inputString):
+        naive_rtol = 1e-4
+        params = inputString.split(",")
+        default_lb = params.pop(0)
+        default_ub = params.pop(0)
+        default_inc = params.pop(0)
+        if params:
+            default_rtol = params.pop(0)
+        else:
+            default_rtol = naive_rtol
+        return (default_lb,default_ub,default_inc,default_rtol)
+
     for fit in order(polyfits):
-        (default_lb,default_ub,default_inc) = model.info("interp",fit).split(",")
+        (default_lb,default_ub,default_inc,default_rtol) = interpParams(model.info("interp",fit))
         for target in order(polyfitTargets[fit]):
-            if target in specialInterp:
-                (varname,lb,ub,inc) = model.info("changeInterpDefault").split(",")
-                assert(varname==str(fit))
-            else:
-                (lb,ub,inc) = (default_lb,default_ub,default_inc)
-            interps[target] = (fit, fitCount, lb, ub, inc)
+            (lb,ub,inc,rtol) = (default_lb,default_ub,default_inc,default_rtol)
+            interps[target] = (fit,fitCount,lb,ub,inc,rtol)
             fitCount += 1
 
     computeAllDepend = model.allDependencies(
@@ -446,10 +452,10 @@ const char* interpName[] = {''', template)
     for fit in range(0,len(interps)):
         fitMap.append(0)
     for target in order(interps.keys()):
-        fit,fitCount,lb,ub,inc = interps[target]
-        fitMap[fitCount] = (target,fit,lb,ub,inc)
+        fit,fitCount,lb,ub,inc,rtol = interps[target]
+        fitMap[fitCount] = (target,fit,lb,ub,inc,rtol)
     for fitCount in range(0,len(fitMap)):
-        (target,fit,lb,ub,inc) = fitMap[fitCount]
+        (target,fit,lb,ub,inc,rtol) = fitMap[fitCount]
         out('"%s",',target)    
     out.dec()
     out(r'''
@@ -582,7 +588,7 @@ void ThisReaction::createInterpolants(const double _dt) {
 
     out.inc()
     for fitCount in range(0,len(interps)):
-        target,fit,lb,ub,inc = fitMap[fitCount]
+        target,fit,lb,ub,inc,rtol = fitMap[fitCount]
         lookup = {
             "target" : target,
             "ub" : ub,
@@ -590,6 +596,7 @@ void ThisReaction::createInterpolants(const double _dt) {
             "inc" : inc,
             "fit" : fit,
             "fitCount" : fitCount,
+            "rtol" : rtol,
         }
         out("{")
         out.inc()
@@ -607,7 +614,7 @@ void ThisReaction::createInterpolants(const double _dt) {
         out.dec()
         out("}")
         out(r'''
-double relError = 1e-4;
+double relError = %(rtol)s;
 double actualTolerance = _interpolant[%(fitCount)d].create(_inputs,_outputs, relError);
 if (actualTolerance > relError  && getRank(0) == 0)
 {
