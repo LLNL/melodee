@@ -303,42 +303,31 @@ def generateCardioid(model, targetName, arch="cpu",interp=True):
 #include "reactionFactory.hh"
 #include <vector>
 #include <sstream>
-''', template)
-    if arch=="nvidia":
-        out(r'''
-#include "TransportCoordinator.hh"
-#include <nvrtc.h>
-#include <cuda.h>
-''', template)
-    elif arch=="cpu" or arch=="vec":
-        out(r'''
-#include <simdops/simdops.hpp>
-''', template)
-    else:
-        assert(False)
-    out(r'''
+
+#ifdef USE_CUDA
+# include "TransportCoordinator.hh"
+# include <nvrtc.h>
+# include <cuda.h>
+#else //USE_CUDA
+# include <simdops/simdops.hpp>
+#endif //USE_CUDA
 
 REACTION_FACTORY(%(target)s)(OBJECT* obj, const double dt, const int numPoints, const ThreadTeam& group);    
 
 namespace %(target)s
 {
 
+#ifndef USE_CUDA
+   struct State
+   {
 ''', template)
-    if arch=="nvidia":
-        pass
-    elif arch=="cpu" or arch=="vec":
-        out.inc()
-        out(r'struct State')
-        out("{")
-        out.inc()
-        for var in order(diffvars):
-            out("double %s[SIMDOPS_FLOAT64V_WIDTH];", var)
-        out.dec()
-        out("};")
-        out.dec()
-    else:
-        assert(False)
+    out.inc(2)
+    for var in order(diffvars):
+        out("double %s[SIMDOPS_FLOAT64V_WIDTH];", var)
+    out.dec(2)
     out(r'''
+   };
+#endif //USE_CUDA
 
    class ThisReaction : public Reaction
    {
@@ -368,9 +357,7 @@ namespace %(target)s
         out("double %s;", var)
     out.dec(2)
     out('''
-''',template)
-    if arch=="nvidia":
-        out(r'''
+#ifdef USE_CUDA
     public:
       void calc(double dt,
                 const Managed<ArrayView<double>> Vm_m,
@@ -387,9 +374,7 @@ namespace %(target)s
       CUmodule _module;
       CUfunction _kernel;
       int blockSize_;
-''', template)
-    elif arch=="cpu" or arch=="vec":
-        out(r'''
+#else //USE_CUDA
     public:
       void calc(double dt,
                 const VectorDouble32& Vm,
@@ -398,9 +383,8 @@ namespace %(target)s
       void initializeMembraneVoltage(VectorDouble32& Vm);
 
       std::vector<State> state_;
+#endif
 ''',template)
-    else:
-        assert(False)
     out.inc(2)
     out("Interpolation _interpolant[%d];" % fitCount)
     out.dec(2)
@@ -566,16 +550,10 @@ const char* interpName[] = {''', template)
          }
          outfile.close();
       }
-      }''',template)
-    if arch=="nvidia":
-        out.inc(2)
-        out("reaction->constructKernel();")
-        out.dec(2)
-    elif arch=="cpu" or arch=="vec":
-        pass
-    else:
-        assert(False)
-    out('''
+      }
+#ifdef USE_CUDA
+      reaction->constructKernel();
+#endif
       return reaction;
    }
 #undef setDefault
@@ -625,13 +603,13 @@ if (actualTolerance > relError  && getRank(0) == 0)
         out.dec()
         out("}")
     out.dec()
-    out('''
-}''',template)
 
+    beforeCalcGood = good.copy()
+    out(r'''
+}
 
-    
-    if arch=="nvidia":
-        out(r'''
+#ifdef USE_CUDA
+
 void generateInterpString(stringstream& ss, const Interpolation& interp, const char* interpVar)
 {
    ss <<
@@ -680,11 +658,11 @@ void ThisReaction::constructKernel()
    ss <<
    "enum StateOffset {\n"
 ''',template)
-        out.inc()
-        for var in order(diffvars):
-            out(r'"   %s_off,\n"',var)
-        out.dec()
-        out(r'''
+    out.inc()
+    for var in order(diffvars):
+        out(r'"   %s_off,\n"',var)
+    out.dec()
+    out(r'''
    "   NUMSTATES\n"
    "};\n"
    "extern \"C\"\n"
@@ -692,91 +670,89 @@ void ThisReaction::constructKernel()
    "const double _dt = " << __cachedDt << ";\n"
    "const int _nCells = " << nCells_ << ";\n"
 ''',template)
-
-
-        out.inc(1)
-        for var in order(params):
-            out(r'"const double %s = " << %s << ";\n"',var,var)
-        out.dec(1)
-        out(r'''
+    out.inc(1)
+    for var in order(params):
+        out(r'"const double %s = " << %s << ";\n"',var,var)
+    out.dec(1)
+    out(r'''
    "const int _ii = threadIdx.x + blockIdx.x*blockDim.x;\n"
    "if (_ii >= _nCells) { return; }\n"
    "const double V = _Vm[_ii];\n"
    "double _ratPoly;\n"
 ''',template)
-        out.inc(1)
-        for var in order(diffvars):
-            out(r'"const double %s = _state[_ii+%s_off*_nCells];\n"',var,var)
+    out.inc(1)
+    for var in order(diffvars):
+        out(r'"const double %s = _state[_ii+%s_off*_nCells];\n"',var,var)
 
-        good |= diffvars
-        good.add(V)
+    good |= diffvars
+    good.add(V)
 
-        calcCodeBuf = io.BytesIO()
-        calcOut = utility.Indenter(calcCodeBuf)
-        iprinter = InterpolatePrintNvidiaVisitor(calcOut, model.ssa, params, interps)
-        calcOut("//get the gate updates (diagonalized exponential integrator)")
-        gateGoals = set()
-        for RLA,RLB in gateTargets.values():
-            gateGoals.add(RLA)
-            gateGoals.add(RLB)
-        good.add(dt)
-        gateSet = model.allDependencies(good|allfits,gateGoals)-good
-        model.printSet(gateSet,iprinter)
-        good |= gateSet
+    calcCodeBuf = io.BytesIO()
+    calcOut = utility.Indenter(calcCodeBuf)
+    iprinter = InterpolatePrintNvidiaVisitor(calcOut, model.ssa, params, interps)
+    calcOut("//get the gate updates (diagonalized exponential integrator)")
+    gateGoals = set()
+    for RLA,RLB in gateTargets.values():
+        gateGoals.add(RLA)
+        gateGoals.add(RLB)
+    good.add(dt)
+    gateSet = model.allDependencies(good|allfits,gateGoals)-good
+    model.printSet(gateSet,iprinter)
+    good |= gateSet
 
-        calcOut("//get the other differential updates")
-        diffGoals = set([diffvarUpdate[var] for var in diffvars-gates])
-        diffSet = model.allDependencies(good|allfits,diffGoals)-good
-        model.printSet(diffSet, iprinter)
-        good |= diffSet
+    calcOut("//get the other differential updates")
+    diffGoals = set([diffvarUpdate[var] for var in diffvars-gates])
+    diffSet = model.allDependencies(good|allfits,diffGoals)-good
+    model.printSet(diffSet, iprinter)
+    good |= diffSet
 
-        calcOut("//get Iion")
-        IionSet = model.allDependencies(good|allfits,set([Iion]))-good
-        model.printSet(IionSet, iprinter)
-        good |= IionSet
+    calcOut("//get Iion")
+    IionSet = model.allDependencies(good|allfits,set([Iion]))-good
+    model.printSet(IionSet, iprinter)
+    good |= IionSet
         
-        calcOut("//Do the markov update (1 step rosenbrock with gauss siedel)")
-        for var in order(markovs):
-            calcOut("double %s = %s;",markovTargets[var],diffvarUpdate[var])
-        calcOut("int _count=0;")
-        calcOut("do")
-        calcOut("{")
-        calcOut.inc()
-        iprinter.pushStack()
+    calcOut("//Do the markov update (1 step rosenbrock with gauss siedel)")
+    for var in order(markovs):
+        calcOut("double %s = %s;",markovTargets[var],diffvarUpdate[var])
+    calcOut("int _count=0;")
+    calcOut("do")
+    calcOut("{")
+    calcOut.inc()
+    iprinter.pushStack()
 
-        for var in order(markovs):
-            calcOut("double %s = %s;",markovOld[var], markovTargets[var])
-        markovGoals = set(markovOld.values())
-        good |= markovGoals
-        iprinter.declaredStack[-1] |= set(["%s" % var for var in markovTargets.values()])
-        markovSet = model.allDependencies(good|allfits,set(markovTargets.values()))
-        model.printSet(markovSet,iprinter)
+    for var in order(markovs):
+        calcOut("double %s = %s;",markovOld[var], markovTargets[var])
+    markovGoals = set(markovOld.values())
+    good |= markovGoals
+    iprinter.declaredStack[-1] |= set(["%s" % var for var in markovTargets.values()])
+    markovSet = model.allDependencies(good|allfits,set(markovTargets.values()))
+    model.printSet(markovSet,iprinter)
 
-        calcOut("_count++;")
+    calcOut("_count++;")
 
-        iprinter.popStack()
-        calcOut.dec()
-        calcOut("} while (_count<50);")
+    iprinter.popStack()
+    calcOut.dec()
+    calcOut("} while (_count<50);")
 
-        calcOut("//EDIT_STATE")
-        for var in order(diffvars-gates-markovs):
-            calcOut('_state[_ii+%s_off*_nCells] += _dt*%s;',var,diffvarUpdate[var])
-        for var in order(gates):
-            (RLA,RLB) = gateTargets[var]
-            calcOut('_state[_ii+%(v)s_off*_nCells] += %(a)s*(%(v)s+%(b)s);',
-                v=var,
-                a=RLA,
-                b=RLB,
-            )
-        for var in order(markovs):
-            calcOut("_state[_ii+%s_off*_nCells] += _dt*%s;",var,markovTargets[var])
+    calcOut("//EDIT_STATE")
+    for var in order(diffvars-gates-markovs):
+        calcOut('_state[_ii+%s_off*_nCells] += _dt*%s;',var,diffvarUpdate[var])
+    for var in order(gates):
+        (RLA,RLB) = gateTargets[var]
+        calcOut('_state[_ii+%(v)s_off*_nCells] += %(a)s*(%(v)s+%(b)s);',
+            v=var,
+            a=RLA,
+            b=RLB,
+        )
+    for var in order(markovs):
+        calcOut("_state[_ii+%s_off*_nCells] += _dt*%s;",var,markovTargets[var])
 
-        for line in calcCodeBuf.getvalue().splitlines():
-            out('"'+line+r'\n"')
+    for line in calcCodeBuf.getvalue().splitlines():
+        out('"'+line+r'\n"')
 
-        out(r'"_dVm[_ii] = -%s;\n"', Iion)
-        out.dec()
-        out(r'''
+    out(r'"_dVm[_ii] = -%s;\n"', Iion)
+    out.dec()
+    out(r'''
    "}\n";
 
    _program_code = ss.str();
@@ -847,11 +823,11 @@ void ThisReaction::calc(double dt,
 }
 
 enum StateOffset {''', template)
-        out.inc()
-        for var in order(diffvars):
-            out("_%s_off,",var)
-        out.dec()
-        out('''
+    out.inc()
+    for var in order(diffvars):
+        out("_%s_off,",var)
+    out.dec()
+    out('''
    NUMSTATES
 };
 
@@ -878,24 +854,11 @@ ThisReaction::~ThisReaction() {
    }
 }
 
-''',template)
-    elif arch=="cpu" or arch=="vec":
-        out('''
+#else //USE_CUDA
 
 #define width SIMDOPS_FLOAT64V_WIDTH
 #define real simdops::float64v
 #define load simdops::load
-
-/*
-#else
-#define width 1
-#define real double
-#define load(x) (*(x))
-#define store(x,y) ((*(x)) = y)
-#define extract(x,y) (x)
-#define insert(x,k,y) (y)
-#endif
-*/
 
 ThisReaction::ThisReaction(const int numPoints, const double __dt)
 : nCells_(numPoints)
@@ -908,15 +871,17 @@ void ThisReaction::calc(double _dt, const VectorDouble32& __Vm,
                        const vector<double>& __iStim , VectorDouble32& __dVm)
 {
    //define the constants''', template)
-        out.inc()
+    out.inc()
 
-        iprinter = InterpolatePrintCPUVisitor(out, model.ssa, params, interps, decltype="double")
-        model.printTarget(good,computeAllDepend&constants,iprinter)
+    good = beforeCalcGood.copy()
 
-        good |= constants
+    iprinter = InterpolatePrintCPUVisitor(out, model.ssa, params, interps, decltype="double")
+    model.printTarget(good,computeAllDepend&constants,iprinter)
 
-        out.dec()
-        out('''
+    good |= constants
+
+    out.dec()
+    out('''
    for (unsigned __jj=0; __jj<(nCells_+width-1)/width; __jj++)
    {
       const int __ii = __jj*width;
@@ -925,107 +890,108 @@ void ThisReaction::calc(double _dt, const VectorDouble32& __Vm,
       const real iStim = load(&__iStim[__ii]);
 
       //set all state variables''', template)
-        out.inc(2)
+    out.inc(2)
         
-        for var in order(diffvars):
-            out('real %s=load(state_[__jj].%s);',var,var)
-        good |= diffvars
-        good.add(V)
+    for var in order(diffvars):
+        out('real %s=load(state_[__jj].%s);',var,var)
+    good |= diffvars
+    good.add(V)
         
-        iprinter = InterpolatePrintCPUVisitor(out, model.ssa, good, interps, decltype="real")
-        out("//get the gate updates (diagonalized exponential integrator)")
-        gateGoals = set()
-        for RLA,RLB in gateTargets.values():
-            gateGoals.add(RLA)
-            gateGoals.add(RLB)
-        good.add(dt)
-        gateSet = model.allDependencies(good|allfits,gateGoals)-good
-        model.printSet(gateSet,iprinter)
-        good |= gateSet
+    iprinter = InterpolatePrintCPUVisitor(out, model.ssa, good, interps, decltype="real")
+    out("//get the gate updates (diagonalized exponential integrator)")
+    gateGoals = set()
+    for RLA,RLB in gateTargets.values():
+        gateGoals.add(RLA)
+        gateGoals.add(RLB)
+    good.add(dt)
+    gateSet = model.allDependencies(good|allfits,gateGoals)-good
+    model.printSet(gateSet,iprinter)
+    good |= gateSet
 
-        out("//get the other differential updates")
-        diffGoals = set([diffvarUpdate[var] for var in diffvars-gates])
-        diffSet = model.allDependencies(good|allfits,diffGoals)-good
-        model.printSet(diffSet, iprinter)
-        good |= diffSet
+    out("//get the other differential updates")
+    diffGoals = set([diffvarUpdate[var] for var in diffvars-gates])
+    diffSet = model.allDependencies(good|allfits,diffGoals)-good
+    model.printSet(diffSet, iprinter)
+    good |= diffSet
 
-        out("//get Iion")
-        IionSet = model.allDependencies(good|allfits,set([Iion]))-good
-        model.printSet(IionSet, iprinter)
-        good |= IionSet
+    out("//get Iion")
+    IionSet = model.allDependencies(good|allfits,set([Iion]))-good
+    model.printSet(IionSet, iprinter)
+    good |= IionSet
         
-        out("//Do the markov update (1 step rosenbrock with gauss siedel)")
-        if markovs:
-            for var in order(markovs):
-                out("real %s = %s;",markovTargets[var],diffvarUpdate[var])
-            out("int _count=0;")
-            out("real _error;")
-            out("do")
-            out("{")
-            out.inc()
-            iprinter.pushStack()
-
-            for var in order(markovs):
-                out("real %s = %s;",markovOld[var], markovTargets[var])
-            markovGoals = set(markovOld.values())
-            good |= markovGoals
-            iprinter.declaredStack[-1] |= set(["%s" % var for var in markovTargets.values()])
-            markovSet = model.allDependencies(good|allfits,set(markovTargets.values()))
-            model.printSet(markovSet,iprinter)
-
-            out("_error = 0;")
-            for var in order(markovs):
-                old = markovOld[var]
-                new = markovTargets[var]
-                out("_error += (%s-%s)*(%s-%s);",old,new,old,new)
-            out("_count++;")
-
-            iprinter.popStack()
-            out.dec()
-            out("} while (any(_error > 1e-100) && _count<50);")
-
-        out("//EDIT_STATE")
-        for var in order(diffvars-gates-markovs):
-            out('%s += _dt*%s;',var,diffvarUpdate[var])
-        for var in order(gates):
-            (RLA,RLB) = gateTargets[var]
-            out('%(v)s += %(a)s*(%(v)s+%(b)s);',
-                v=var,
-                a=RLA,
-                b=RLB,
-            )
+    out("//Do the markov update (1 step rosenbrock with gauss siedel)")
+    if markovs:
         for var in order(markovs):
-            out("%s += _dt*%s;",var,markovTargets[var])
+            out("real %s = %s;",markovTargets[var],diffvarUpdate[var])
+        out("int _count=0;")
+        out("real _error;")
+        out("do")
+        out("{")
+        out.inc()
+        iprinter.pushStack()
 
-        for var in order(diffvars):
-            out("store(state_[__jj].%s, %s);", var,var)
+        for var in order(markovs):
+            out("real %s = %s;",markovOld[var], markovTargets[var])
+        markovGoals = set(markovOld.values())
+        good |= markovGoals
+        iprinter.declaredStack[-1] |= set(["%s" % var for var in markovTargets.values()])
+        markovSet = model.allDependencies(good|allfits,set(markovTargets.values()))
+        model.printSet(markovSet,iprinter)
 
-        out("store(&__dVm[__ii],-%s);", Iion)
-        out.dec(2)
-        out('''
-   }
-}''',template)
-    else:
-        assert(False)
+        out("_error = 0;")
+        for var in order(markovs):
+            old = markovOld[var]
+            new = markovTargets[var]
+            out("_error += (%s-%s)*(%s-%s);",old,new,old,new)
+        out("_count++;")
+
+        iprinter.popStack()
+        out.dec()
+        out("} while (any(_error > 1e-100) && _count<50);")
+
+    out("//EDIT_STATE")
+    for var in order(diffvars-gates-markovs):
+        out('%s += _dt*%s;',var,diffvarUpdate[var])
+    for var in order(gates):
+        (RLA,RLB) = gateTargets[var]
+        out('%(v)s += %(a)s*(%(v)s+%(b)s);',
+            v=var,
+            a=RLA,
+            b=RLB,
+        )
+    for var in order(markovs):
+        out("%s += _dt*%s;",var,markovTargets[var])
+
+    for var in order(diffvars):
+        out("store(state_[__jj].%s, %s);", var,var)
+
+    out("store(&__dVm[__ii],-%s);", Iion)
+    out.dec(2)
     out('''
-
+   }
+}
+#endif //USE_CUDA
    
 string ThisReaction::methodName() const
 {
    return "%(target)s";
-}'''%template)
-    if arch=="cpu" or arch=="vec":
-        out('''
+}
+
+#ifdef USE_CUDA
+void ThisReaction::initializeMembraneVoltage(ArrayView<double> __Vm)
+#else //USE_CUDA
 void ThisReaction::initializeMembraneVoltage(VectorDouble32& __Vm)
+#endif //USE_CUDA
 {
    assert(__Vm.size() >= nCells_);
 
-''', template)
-    elif arch=="nvidia":
-        out('''
-void ThisReaction::initializeMembraneVoltage(ArrayView<double> __Vm)
-{
-   assert(__Vm.size() >= nCells_);
+#ifdef USE_CUDA
+#define READ_STATE(state,index) (stateData[_##state##_off*nCells_+index])
+   ArrayView<double> stateData = stateTransport_;
+#else //USE_CUDA
+#define READ_STATE(state,index) (state_[index/width].state[index %% width])
+   state_.resize((nCells_+width-1)/width);
+#endif //USE_CUDA
 
 ''', template)
     
@@ -1041,25 +1007,11 @@ void ThisReaction::initializeMembraneVoltage(ArrayView<double> __Vm)
     out("double V = V_init;") #FIXME, possibly make more general?
     model.printTarget(good,diffvars,cprinter)
 
-    if arch=="nvidia":
-        def readState(var,index):
-            return "stateData[_%s_off*nCells_+%s]" % (var,index)
-        def writeState(statevar,value,index):
-            return "%s = %s;" % (readState(statevar,index),value)
-    elif arch=="cpu" or arch=="vec":
-        def readState(var,index):
-            return "state_[%s/width].%s[%s %% width]" % (index,var,index)
-        def writeState(statevar,value,index):
-            return "%s = %s;" % (readState(statevar,index),value)
-    else:
-        assert(False)
+    def readState(var,index):
+        return "READ_STATE(%s,%s)" % (var,index)
+    def writeState(statevar,value,index):
+        return "%s = %s;" % (readState(statevar,index),value)
         
-    if arch=="nvidia":
-        out("ArrayView<double> stateData = stateTransport_;")
-    elif arch=="cpu" or arch=="vec":
-        out("state_.resize((nCells_+width-1)/width);")
-    else:
-        assert(False)
     out(r'for (int iCell=0; iCell<nCells_; iCell++)')
     out('{')
     out.inc()
@@ -1111,14 +1063,14 @@ int ThisReaction::getVarHandle(const std::string& varName) const
 }
 
 void ThisReaction::setValue(int iCell, int varHandle, double value) 
-{''', template)
+{
+#ifdef USE_CUDA
+   ArrayView<double> stateData = stateTransport_;
+#endif //USE_CUDA
+
+
+''', template)
     out.inc()
-    if arch=="nvidia":
-        out("ArrayView<double> stateData = stateTransport_;")
-    elif arch=="cpu" or arch=="vec":
-        pass
-    else:
-        assert(False)
     out("if (0) {}")
     for var in order(diffvars):
         out('else if (varHandle == %s_handle) { %s }', var, writeState(var,"value","iCell"))
@@ -1128,14 +1080,13 @@ void ThisReaction::setValue(int iCell, int varHandle, double value)
 
 
 double ThisReaction::getValue(int iCell, int varHandle) const
-{''', template)
+{
+#ifdef USE_CUDA
+   ConstArrayView<double> stateData = stateTransport_;
+#endif //USE_CUDA
+
+''', template)
     out.inc()
-    if arch=="nvidia":
-        out("ConstArrayView<double> stateData = stateTransport_;")
-    elif arch=="cpu" or arch=="vec":
-        pass
-    else:
-        assert(False)
     out("if (0) {}")
     for var in order(diffvars):
         out('else if (varHandle == %s_handle) { return %s; }', var, readState(var,"iCell"))
@@ -1147,14 +1098,12 @@ double ThisReaction::getValue(int iCell, int varHandle) const
 
 double ThisReaction::getValue(int iCell, int varHandle, double V) const
 {
+#ifdef USE_CUDA
+   ConstArrayView<double> stateData = stateTransport_;
+#endif //USE_CUDA
+
 ''', template)
     out.inc()
-    if arch=="nvidia":
-        out("ConstArrayView<double> stateData = stateTransport_;")
-    elif arch=="cpu" or arch=="vec":
-        pass
-    else:
-        assert(False)
     for var in order(diffvars):
         out('const double %s=%s;',var,readState(var,"iCell"))
     out('if (0) {}')
@@ -1192,8 +1141,5 @@ void ThisReaction::getCheckpointInfo(vector<string>& fieldNames,
 
 generators = {
     frozenset(["cardioid"]) : lambda model, targetName : generateCardioid(model,targetName,"cpu"),
-    frozenset(["cardioid", "cpu"]) : lambda model, targetName : generateCardioid(model,targetName,"cpu"),
-    frozenset(["cardioid", "nvidia"]) : lambda model, targetName : generateCardioid(model,targetName,"nvidia"), 
-    frozenset(["cardioid", "vec"]) : lambda model, targetName : generateCardioid(model,targetName,"vec"),
     frozenset(["cardioid", "nointerp"]) : lambda model, targetName : generateCardioid(model,targetName,"cpu",interp=False)
 }
