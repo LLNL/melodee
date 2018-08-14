@@ -400,10 +400,7 @@ namespace %(target)s
 
 ''', template)
 
-    extension="cc"
-    if arch=="nvidia":
-        arch="cu"
-    out = utility.Indenter(open(targetName+"."+extension,"w"))
+    out = utility.Indenter(open(targetName+".cc","w"))
     out('''
 /**
 
@@ -502,6 +499,7 @@ const char* interpName[] = {''', template)
          {
             vector<string> functions;
             objectGet(fitObj, "functions", functions);
+            OBJECT* funcObj;
             if (functions.size() == funcCount)
             {
                for (int _ii=0; _ii<functions.size(); _ii++)
@@ -988,59 +986,20 @@ string ThisReaction::methodName() const
 }
 
 #ifdef USE_CUDA
-
-#define READ_STATE(state,index) (stateData[_##state##_off*nCells_+index])
-__global__ void initMembraneState(int nCells_, int nStates_, OnDevice<ArrayView<double>> perCellData, OnDevice<ArrayView<double>> stateData)
-{
-   const int _ii = threadIdx.x + blockIdx.x*blockDim.x;
-   if (_ii >= nCells_) { return; }
-
-   for (int _jj=0; _jj<nStates_; _jj++)
-   {
-      stateData[_jj*nCells_+_ii] = perCellData[_jj];
-   }
-}
-
 void ThisReaction::initializeMembraneVoltage(ArrayView<double> __Vm)
-{
-   assert(__Vm.size() >= nCells_);
-   TransportCoordinator<PinnedVector<double>> perCellDataTransport;
-   perCellDataTransport.setup(PinnedVector<double>(NUMSTATES));
-   ArrayView<double> perCellData = perCellDataTransport.writeOnHost();
-
-''', template)
-    
-    out.inc()
-    
-    cprinter = CPrintVisitor(out, model.ssa, params)
-    good = set()
-    good |= params
-    target = set([V_init])
-    model.printTarget(good,target,cprinter)
-
-    good.add(V)
-    out("double V = V_init;") #FIXME, possibly make more general?
-    model.printTarget(good,diffvars,cprinter)
-
-    for var in order(diffvars):
-        out("perCellData[_%s_off] = %s;" % (var,var))
-
-    out.dec()
-    out('''
-    
-   int blockSize=32;
-   initMembraneState<<<blockSize,(nCells_+blockSize-1)/blockSize>>>(nCells_, NUMSTATES, perCellDataTransport, stateTransport_.writeOnDevice());
-   __Vm.assign(__Vm.size(), V);
-}
-
 #else //USE_CUDA
-
-#define READ_STATE(state,index) (state_[index/width].state[index %% width])
 void ThisReaction::initializeMembraneVoltage(VectorDouble32& __Vm)
+#endif //USE_CUDA
 {
    assert(__Vm.size() >= nCells_);
 
+#ifdef USE_CUDA
+#define READ_STATE(state,index) (stateData[_##state##_off*nCells_+index])
+   ArrayView<double> stateData = stateTransport_;
+#else //USE_CUDA
+#define READ_STATE(state,index) (state_[index/width].state[index %% width])
    state_.resize((nCells_+width-1)/width);
+#endif //USE_CUDA
 
 ''', template)
     
@@ -1055,12 +1014,12 @@ void ThisReaction::initializeMembraneVoltage(VectorDouble32& __Vm)
     good.add(V)
     out("double V = V_init;") #FIXME, possibly make more general?
     model.printTarget(good,diffvars,cprinter)
-        
+
     def readState(var,index):
         return "READ_STATE(%s,%s)" % (var,index)
     def writeState(statevar,value,index):
         return "%s = %s;" % (readState(statevar,index),value)
-
+        
     out(r'for (int iCell=0; iCell<nCells_; iCell++)')
     out('{')
     out.inc()
@@ -1072,12 +1031,6 @@ void ThisReaction::initializeMembraneVoltage(VectorDouble32& __Vm)
 
    __Vm.assign(__Vm.size(), V_init);
 }
-#endif //USE_CUDA
-
-#ifdef USE_CUDA
-#else //USE_CUDA
-#endif //USE_CUDA
-
 
 enum varHandles
 {''', template)
@@ -1196,6 +1149,5 @@ void ThisReaction::getCheckpointInfo(vector<string>& fieldNames,
 
 generators = {
     frozenset(["cardioid"]) : lambda model, targetName : generateCardioid(model,targetName,"cpu"),
-    frozenset(["cardioid","nvidia"]) : lambda model, targetName : generateCardioid(model,targetName,"nvidia"),
     frozenset(["cardioid", "nointerp"]) : lambda model, targetName : generateCardioid(model,targetName,"cpu",interp=False)
 }
