@@ -214,6 +214,11 @@ def generateCardioid(model, targetName, arch="cpu",interp=True):
         RLB = model.addInstruction("_%s_RLB" % gate, M/L)
         gateTargets[gate] = (RLA,RLB)
 
+    gateInf = set()
+    for gate in gates:
+        RLA,RLB = gateTargets[gate]
+        gateInf.add(RLB)
+        
     markovOld = {}
     for markov in order(markovs):
         markovOld[markov] = model.addSymbol("_mi_old_%s" % markov)
@@ -577,7 +582,10 @@ void ThisReaction::createInterpolants(const double _dt) {
             "fit" : fit,
             "fitCount" : fitCount,
             "rtol" : rtol,
+            "window" : 0.1,
         }
+        if target in gateInf:
+            lookup["window"] = 1
         out("{")
         out.inc()
         out("int _numPoints = (%(ub)s - %(lb)s)/%(inc)s;", lookup)
@@ -595,7 +603,7 @@ void ThisReaction::createInterpolants(const double _dt) {
         out("}")
         out(r'''
 double relError = %(rtol)s;
-double actualTolerance = _interpolant[%(fitCount)d].create(_inputs,_outputs, relError);
+double actualTolerance = _interpolant[%(fitCount)d].create(_inputs,_outputs, relError,%(window)s);
 if (actualTolerance > relError  && getRank(0) == 0)
 {
    cerr << "Warning: Could not meet tolerance for %(target)s: " 
