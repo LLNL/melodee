@@ -31,7 +31,7 @@ from sympy.printing.ccode import C99CodePrinter
 from sympy.core import S
 
 
-from melodee.parser import MelodeeParser,Differentiator
+from melodee.parser import MelodeeParser,Differentiator,Choice
 from melodee import utility
 from melodee.utility import order
 
@@ -300,6 +300,17 @@ def generateCardioid(model, targetName, arch="cpu",interp=True):
         computeTargets)
     constants = model.allExcluding(approxvars,statevars) & computeAllDepend
 
+    #FIXME!  This is a kludge until I get masking working properly for simd stuff.
+    #for now, just disable any simdops for vectorized code.
+    vecVars = computeAllDepend-constants;
+    #Are any of these variables booleans?
+    ifVars = set()
+    for var in vecVars-approxvars-statevars-params:
+        rhs = model.ssa[var]
+        if isinstance(rhs, Choice):
+            ifVars.add(rhs.ifVar)
+    canUseVecops = not bool(vecVars&ifVars)
+    
     out = utility.Indenter(open(targetName+".hh","w"))
     out('''
 #include "Reaction.hh"
@@ -313,7 +324,11 @@ def generateCardioid(model, targetName, arch="cpu",interp=True):
 # include "TransportCoordinator.hh"
 # include <nvrtc.h>
 # include <cuda.h>
-#else //USE_CUDA
+#else //USE_CUDA''', template)
+    out('# if %d', not canUseVecops)
+    out('''
+#  include <simdops/resetArch.hpp>
+# endif
 # include <simdops/simdops.hpp>
 #endif //USE_CUDA
 
