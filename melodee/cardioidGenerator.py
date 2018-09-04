@@ -450,7 +450,7 @@ static inline string TO_STRING(const TTT x)
    return ss.str();
 }
 
-const char* interpName[] = {''', template)
+static const char* interpName[] = {''', template)
     out.inc()
     fitMap = []
     for fit in range(0,len(interps)):
