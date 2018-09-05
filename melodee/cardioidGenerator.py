@@ -988,7 +988,7 @@ void ThisReaction::calc(double _dt, const VectorDouble32& __Vm,
     for var in order(diffvars):
         out("store(state_[__jj].%s, %s);", var,var)
 
-    out("store(&__dVm[__ii],-%s);", Iion)
+    out("simdops::store(&__dVm[__ii],-%s);", Iion)
     out.dec(2)
     out('''
    }
