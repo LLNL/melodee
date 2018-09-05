@@ -402,11 +402,12 @@ namespace %(target)s
                 VectorDouble32& dVm);
       void initializeMembraneVoltage(VectorDouble32& Vm);
 
-      std::vector<State> state_;
+      std::vector<State, AlignedAllocator<State> > state_;
 #endif
 ''',template)
     out.inc(2)
-    out("Interpolation _interpolant[%d];" % fitCount)
+    out("//BGQ_HACKFIX, compiler bug with zero length arrays")
+    out("Interpolation _interpolant[%d+1];" % fitCount)
     out.dec(2)
     out('''
       FRIEND_FACTORY(%(target)s)(OBJECT* obj, const double dt, const int numPoints, const ThreadTeam& group);
@@ -491,7 +492,7 @@ static const char* interpName[] = {''', template)
       bool reusingInterpolants = false;
       string fitName;
       objectGet(obj, "fit", fitName, "");
-      int funcCount = sizeof(reaction->_interpolant)/sizeof(reaction->_interpolant[0]);
+      int funcCount = sizeof(reaction->_interpolant)/sizeof(reaction->_interpolant[0])-1; //BGQ_HACKFIX, compiler bug with zero length arrays
       if (fitName != "")
       {
          OBJECT* fitObj = objectFind(fitName, "FIT");''' % template)
