@@ -321,7 +321,7 @@ def generateCardioid(model, targetName, arch="cpu",interp=True):
 #include <sstream>
 
 #ifdef USE_CUDA
-# include "TransportCoordinator.hh"
+# include "lazy_array.hh"
 # include <nvrtc.h>
 # include <cuda.h>
 #else //USE_CUDA''', template)
@@ -380,14 +380,14 @@ namespace %(target)s
 #ifdef USE_CUDA
     public:
       void calc(double dt,
-                const Managed<ArrayView<double>> Vm_m,
-                const Managed<ArrayView<double>> iStim_m,
-                Managed<ArrayView<double>> dVm_m);
-      void initializeMembraneVoltage(ArrayView<double> Vm);
+                ro_larray_ptr<double> Vm_m,
+                ro_larray_ptr<double> iStim_m,
+                wo_larray_ptr<double> dVm_m);
+      void initializeMembraneVoltage(wo_larray_ptr<double> Vm);
       virtual ~ThisReaction();
       void constructKernel();
 
-      TransportCoordinator<PinnedVector<double> > stateTransport_;
+      lazy_array<double> stateTransport_;
       std::string _program_code;
       nvrtcProgram _program;
       std::vector<char> _ptx;
@@ -800,24 +800,25 @@ void ThisReaction::constructKernel()
 }
 
 void ThisReaction::calc(double dt,
-                const Managed<ArrayView<double>> Vm_m,
-                const Managed<ArrayView<double>> iStim_m,
-                Managed<ArrayView<double>> dVm_m)
+                ro_larray_ptr<double> Vm_m,
+                ro_larray_ptr<double> iStim_m,
+                wo_larray_ptr<double> dVm_m)
 {
-   ArrayView<double> state = stateTransport_.modifyOnDevice();
+   ContextRegion region(GPU);
+   rw_larray_ptr<double> state = stateTransport_;
+   Vm_m.use();
+   iStim_m.use();
+   dVm_m.use();
 
    {
       int errorCode=-1;
       if (blockSize_ == -1) { blockSize_ = 1024; }
       while(1)
       {
-         ConstArrayView<double> Vm = Vm_m.readOnDevice();
-         ConstArrayView<double> iStim = iStim_m.readOnDevice();
-         ArrayView<double> dVm = dVm_m.modifyOnDevice();
-         double* VmRaw = const_cast<double*>(&Vm[0]);
-         double* iStimRaw = const_cast<double*>(&iStim[0]);
-         double* dVmRaw = &dVm[0];
-         double* stateRaw= &state[0];
+         const double* VmRaw = Vm_m.raw();
+         const double* iStimRaw = iStim_m.raw();
+         double* dVmRaw = dVm_m.raw();
+         double* stateRaw= state.raw();
          void* args[] = { &VmRaw,
                           &iStimRaw,
                           &dVmRaw,
@@ -858,7 +859,7 @@ enum StateOffset {''', template)
 ThisReaction::ThisReaction(const int numPoints, const double __dt)
 : nCells_(numPoints)
 {
-   stateTransport_.setup(PinnedVector<double>(nCells_*NUMSTATES));
+   stateTransport_.resize(nCells_*NUMSTATES);
    __cachedDt = __dt;
    blockSize_ = -1;
    _program = NULL;
@@ -1002,7 +1003,7 @@ string ThisReaction::methodName() const
 }
 
 #ifdef USE_CUDA
-void ThisReaction::initializeMembraneVoltage(ArrayView<double> __Vm)
+void ThisReaction::initializeMembraneVoltage(wo_larray_ptr<double> __Vm)
 #else //USE_CUDA
 void ThisReaction::initializeMembraneVoltage(VectorDouble32& __Vm)
 #endif //USE_CUDA
@@ -1011,7 +1012,9 @@ void ThisReaction::initializeMembraneVoltage(VectorDouble32& __Vm)
 
 #ifdef USE_CUDA
 #define READ_STATE(state,index) (stateData[_##state##_off*nCells_+index])
-   ArrayView<double> stateData = stateTransport_;
+   ContextRegion region(CPU);
+   __Vm.use();
+   wo_larray_ptr<double> stateData = stateTransport_;
 #else //USE_CUDA
 #define READ_STATE(state,index) (state_[index/width].state[index %% width])
    state_.resize((nCells_+width-1)/width);
@@ -1089,7 +1092,8 @@ int ThisReaction::getVarHandle(const std::string& varName) const
 void ThisReaction::setValue(int iCell, int varHandle, double value) 
 {
 #ifdef USE_CUDA
-   ArrayView<double> stateData = stateTransport_;
+   ContextRegion region(CPU);
+   wo_larray_ptr<double> stateData = stateTransport_;
 #endif //USE_CUDA
 
 
@@ -1106,7 +1110,8 @@ void ThisReaction::setValue(int iCell, int varHandle, double value)
 double ThisReaction::getValue(int iCell, int varHandle) const
 {
 #ifdef USE_CUDA
-   ConstArrayView<double> stateData = stateTransport_;
+   ContextRegion region(CPU);
+   ro_larray_ptr<double> stateData = stateTransport_;
 #endif //USE_CUDA
 
 ''', template)
@@ -1123,7 +1128,8 @@ double ThisReaction::getValue(int iCell, int varHandle) const
 double ThisReaction::getValue(int iCell, int varHandle, double V) const
 {
 #ifdef USE_CUDA
-   ConstArrayView<double> stateData = stateTransport_;
+   ContextRegion region(CPU);
+   ro_larray_ptr<double> stateData = stateTransport_;
 #endif //USE_CUDA
 
 ''', template)
