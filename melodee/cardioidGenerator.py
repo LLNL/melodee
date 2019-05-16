@@ -330,6 +330,7 @@ def generateCardioid(model, targetName, arch="cpu",interp=True):
 #  include <simdops/resetArch.hpp>
 # endif
 # include <simdops/simdops.hpp>
+# include "VectorDouble32.hh"
 #endif //USE_CUDA
 
 REACTION_FACTORY(%(target)s)(OBJECT* obj, const double dt, const int numPoints, const ThreadTeam& group);    
@@ -377,14 +378,14 @@ namespace %(target)s
         out("double %s;", var)
     out.dec(2)
     out('''
-#ifdef USE_CUDA
     public:
       void calc(double dt,
-                ro_larray_ptr<double> Vm_m,
-                ro_larray_ptr<double> iStim_m,
-                wo_larray_ptr<double> dVm_m);
-      void initializeMembraneVoltage(wo_larray_ptr<double> Vm);
+                ro_mgarray_ptr<double> Vm_m,
+                ro_mgarray_ptr<double> iStim_m,
+                wo_mgarray_ptr<double> dVm_m);
+      void initializeMembraneVoltage(wo_mgarray_ptr<double> Vm);
       virtual ~ThisReaction();
+#ifdef USE_CUDA
       void constructKernel();
 
       lazy_array<double> stateTransport_;
@@ -395,13 +396,6 @@ namespace %(target)s
       CUfunction _kernel;
       int blockSize_;
 #else //USE_CUDA
-    public:
-      void calc(double dt,
-                const VectorDouble32& Vm,
-                const std::vector<double>& iStim,
-                VectorDouble32& dVm);
-      void initializeMembraneVoltage(VectorDouble32& Vm);
-
       std::vector<State, AlignedAllocator<State> > state_;
 #endif
 ''',template)
@@ -800,25 +794,21 @@ void ThisReaction::constructKernel()
 }
 
 void ThisReaction::calc(double dt,
-                ro_larray_ptr<double> Vm_m,
-                ro_larray_ptr<double> iStim_m,
-                wo_larray_ptr<double> dVm_m)
+                ro_mgarray_ptr<double> Vm_m,
+                ro_mgarray_ptr<double> iStim_m,
+                wo_mgarray_ptr<double> dVm_m)
 {
-   ContextRegion region(GPU);
-   rw_larray_ptr<double> state = stateTransport_;
-   Vm_m.use();
-   iStim_m.use();
-   dVm_m.use();
+   if (nCells_ == 0) { return; }
 
    {
       int errorCode=-1;
       if (blockSize_ == -1) { blockSize_ = 1024; }
       while(1)
       {
-         const double* VmRaw = Vm_m.raw();
-         const double* iStimRaw = iStim_m.raw();
-         double* dVmRaw = dVm_m.raw();
-         double* stateRaw= state.raw();
+         const double* VmRaw = Vm_m.useOn(GPU).raw();
+         const double* iStimRaw = iStim_m.useOn(GPU).raw();
+         double* dVmRaw = dVm_m.useOn(GPU).raw();
+         double* stateRaw= stateTransport_.readwrite(GPU).raw();
          void* args[] = { &VmRaw,
                           &iStimRaw,
                           &dVmRaw,
@@ -892,9 +882,17 @@ ThisReaction::ThisReaction(const int numPoints, const double __dt)
    __cachedDt = __dt;
 }
 
-void ThisReaction::calc(double _dt, const VectorDouble32& __Vm,
-                       const vector<double>& __iStim , VectorDouble32& __dVm)
+ThisReaction::~ThisReaction() {}
+
+void ThisReaction::calc(double _dt,
+                ro_mgarray_ptr<double> ___Vm,
+                ro_mgarray_ptr<double> ___iStim,
+                wo_mgarray_ptr<double> ___dVm)
 {
+   ro_array_ptr<double> __Vm = ___Vm.useOn(CPU);
+   ro_array_ptr<double> __iStim = ___iStim.useOn(CPU);
+   wo_array_ptr<double> __dVm = ___dVm.useOn(CPU);
+
    //define the constants''', template)
     out.inc()
 
@@ -990,7 +988,7 @@ void ThisReaction::calc(double _dt, const VectorDouble32& __Vm,
     for var in order(diffvars):
         out("store(state_[__jj].%s, %s);", var,var)
 
-    out("simdops::store(&__dVm[__ii],-%s);", Iion)
+    out("simdops::store(&__dVm.raw()[__ii],-%s);", Iion)
     out.dec(2)
     out('''
    }
@@ -1002,19 +1000,14 @@ string ThisReaction::methodName() const
    return "%(target)s";
 }
 
-#ifdef USE_CUDA
-void ThisReaction::initializeMembraneVoltage(wo_larray_ptr<double> __Vm)
-#else //USE_CUDA
-void ThisReaction::initializeMembraneVoltage(VectorDouble32& __Vm)
-#endif //USE_CUDA
+void ThisReaction::initializeMembraneVoltage(wo_mgarray_ptr<double> __Vm_m)
 {
-   assert(__Vm.size() >= nCells_);
+   assert(__Vm_m.size() >= nCells_);
 
+   wo_array_ptr<double> __Vm = __Vm_m.useOn(CPU);
 #ifdef USE_CUDA
 #define READ_STATE(state,index) (stateData[_##state##_off*nCells_+index])
-   ContextRegion region(CPU);
-   __Vm.use();
-   wo_larray_ptr<double> stateData = stateTransport_;
+   wo_array_ptr<double> stateData = stateTransport_.useOn(CPU);
 #else //USE_CUDA
 #define READ_STATE(state,index) (state_[index/width].state[index %% width])
    state_.resize((nCells_+width-1)/width);
@@ -1092,8 +1085,7 @@ int ThisReaction::getVarHandle(const std::string& varName) const
 void ThisReaction::setValue(int iCell, int varHandle, double value) 
 {
 #ifdef USE_CUDA
-   ContextRegion region(CPU);
-   wo_larray_ptr<double> stateData = stateTransport_;
+   auto stateData = stateTransport_.readwrite(CPU);
 #endif //USE_CUDA
 
 
@@ -1110,8 +1102,7 @@ void ThisReaction::setValue(int iCell, int varHandle, double value)
 double ThisReaction::getValue(int iCell, int varHandle) const
 {
 #ifdef USE_CUDA
-   ContextRegion region(CPU);
-   ro_larray_ptr<double> stateData = stateTransport_;
+   auto stateData = stateTransport_.readonly(CPU);
 #endif //USE_CUDA
 
 ''', template)
@@ -1128,8 +1119,7 @@ double ThisReaction::getValue(int iCell, int varHandle) const
 double ThisReaction::getValue(int iCell, int varHandle, double V) const
 {
 #ifdef USE_CUDA
-   ContextRegion region(CPU);
-   ro_larray_ptr<double> stateData = stateTransport_;
+   auto stateData = stateTransport_.readonly(CPU);
 #endif //USE_CUDA
 
 ''', template)
