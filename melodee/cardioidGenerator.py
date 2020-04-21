@@ -705,7 +705,7 @@ void ThisReaction::constructKernel()
     good |= diffvars
     good.add(V)
 
-    calcCodeBuf = io.BytesIO()
+    calcCodeBuf = io.StringIO()
     calcOut = utility.Indenter(calcCodeBuf)
     iprinter = InterpolatePrintNvidiaVisitor(calcOut, model.ssa, params, interps)
     calcOut("//get the gate updates (diagonalized exponential integrator)")

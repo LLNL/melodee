@@ -122,7 +122,7 @@ class ConsolidatedSystem:
         return self._namedVariables[name][symbol]
 
     def addSymbol(self, name):
-        if isinstance(name, basestring):
+        if isinstance(name, str):
             return Symbol(name)
         else:
             return name
