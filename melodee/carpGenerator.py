@@ -26,7 +26,6 @@
 import sys
 import re
 import sympy
-from sympy.printing.ccode import CCodePrinter
 from sympy.core import S
 
 

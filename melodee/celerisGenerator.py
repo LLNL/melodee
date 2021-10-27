@@ -27,7 +27,7 @@ import sys
 import re
 import sympy
 import io
-from sympy.printing.fcode import FCodePrinter
+from sympy.printing.fortran import FCodePrinter
 from sympy.core import S
 
 

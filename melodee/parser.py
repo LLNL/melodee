@@ -316,11 +316,11 @@ class XXXSyntaxError(SyntaxError):
     def __str__(self):
         return self.text
 
-class Symbol(sympy.symbol.Dummy):
+class Symbol(sympy.Dummy):
     def __new__(cls, *args, **kwargs):
         return super(Symbol,cls).__new__(cls,*args,**kwargs)
     def __str__(self):
-        ret = sympy.symbol.Dummy.__str__(self)
+        ret = sympy.Dummy.__str__(self)
         #return ret[1:]
         return ret
 

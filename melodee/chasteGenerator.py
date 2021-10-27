@@ -26,7 +26,7 @@
 import sys
 import re
 import sympy
-from sympy.printing.ccode import C99CodePrinter
+from sympy.printing.c import C99CodePrinter
 from sympy.core import S
 
 

@@ -22,7 +22,7 @@ setup(
       license='Apache-2.0',
       packages=['melodee'],
       install_requires=[
-          'sympy',
+          'sympy>=1.9',
           'ply',
           #'xml',
       ],
