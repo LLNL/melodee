@@ -1,0 +1,40 @@
+/*
+ * <license>
+ * Copyright (c) 2016-2017, Lawrence Livermore National Security,
+ * LLC. Produced at the Lawrence Livermore National Laboratory. Written
+ * by Robert Blake <blake14@llnl.gov>.
+ *
+ * LLNL-CODE-720003.
+ * All rights reserved.
+ *
+ * This file is part of MELODEE. For details, see
+ * http://github.com/llnl/melodee.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "Licensee"); you
+ * may not use this file except in compliance with the License.  You may
+ * obtain a copy of the License at:
+ * 
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * permissions and limitations under the license.
+ * </license> 
+ */
+
+integrate time {ms};
+
+shared V {mV};
+shared Iion {uA/uF};
+shared V_init {mV};
+
+subsystem Passive {
+   @param E_R {mV} = -85;
+   @param G {mS/uF} = 0.00060643000000000003;
+
+   provides V_init = E_R;
+   provides Iion = G*(V-E_R);
+}
+
