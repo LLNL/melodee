@@ -959,7 +959,6 @@ void ThisReaction::calc(double _dt,
         for var in order(markovs):
             out("real %s = %s;",markovTargets[var],diffvarUpdate[var])
         out("int _count=0;")
-        out("real _error;")
         out("do")
         out("{")
         out.inc()
@@ -973,16 +972,11 @@ void ThisReaction::calc(double _dt,
         markovSet = model.allDependencies(good|allfits,set(markovTargets.values()))-good
         model.printSet(markovSet,iprinter)
 
-        out("_error = 0;")
-        for var in order(markovs):
-            old = markovOld[var]
-            new = markovTargets[var]
-            out("_error += (%s-%s)*(%s-%s);",old,new,old,new)
         out("_count++;")
 
         iprinter.popStack()
         out.dec()
-        out("} while (any(_error > 1e-100) && _count<50);")
+        out("} while (_count<50);")
 
     out("//EDIT_STATE")
     for var in order(diffvars-gates-markovs):
