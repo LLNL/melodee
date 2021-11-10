@@ -744,7 +744,7 @@ void ThisReaction::constructKernel()
     markovGoals = set(markovOld.values())
     good |= markovGoals
     iprinter.declaredStack[-1] |= set(["%s" % var for var in markovTargets.values()])
-    markovSet = model.allDependencies(good|allfits,set(markovTargets.values()))
+    markovSet = model.allDependencies(good|allfits,set(markovTargets.values()))-good
     model.printSet(markovSet,iprinter)
 
     calcOut("_count++;")
@@ -970,7 +970,7 @@ void ThisReaction::calc(double _dt,
         markovGoals = set(markovOld.values())
         good |= markovGoals
         iprinter.declaredStack[-1] |= set(["%s" % var for var in markovTargets.values()])
-        markovSet = model.allDependencies(good|allfits,set(markovTargets.values()))
+        markovSet = model.allDependencies(good|allfits,set(markovTargets.values()))-good
         model.printSet(markovSet,iprinter)
 
         out("_error = 0;")
