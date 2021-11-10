@@ -42,7 +42,7 @@ def stripNamespaces(elementRoot):
     for el in elementRoot.getiterator():
         if '}' in el.tag:
             el.tag = el.tag.split('}', 1)[1]  # strip all namespaces
-        for at in el.attrib.keys(): # strip namespaces of attributes too
+        for at in list(el.attrib.keys()): # strip namespaces of attributes too
             if '}' in at:
                 newat = at.split('}', 1)[1]
                 el.attrib[newat] = el.attrib[at]
@@ -292,8 +292,7 @@ class Component:
             if var.get("initial_value"):
                 self.eqns[name] = Equation(name, var.get("initial_value"), units[var.get("units")])
             self.varToUnit[name] = units[var.get("units")]
-        mathElement = root.find("math")
-        if mathElement:
+        for mathElement in root.findall("math"):
             for eqnElement in mathElement.findall("apply"):
                 eqn = parseEquation(eqnElement, self.varToUnit)
                 if eqn.isDiff:
